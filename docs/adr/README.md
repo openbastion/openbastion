@@ -21,15 +21,16 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 7 | [Break-glass](#7-break-glass) | 4 |
 | 8 | [Proxy SSH](#8-proxy-ssh) | 5 |
 | 9 | [Proxy écran RDP et VNC](#9-proxy-écran-rdp-et-vnc) | 14 |
-| 10 | [Chaîne d'audit](#10-chaîne-daudit) | 11 |
-| 11 | [Lectures auditées](#11-lectures-auditées) | 5 |
-| 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 5 |
-| 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 6 |
-| 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
-| 15 | [Agents distribués](#15-agents-distribués) | 9 |
-| 16 | [Posture de sécurité](#16-posture-de-sécurité) | 3 |
-| 17 | [Alignement UI, contrats et roadmap](#17-alignement-ui-contrats-et-roadmap) | 10 |
-| 18 | [Gouvernance et workflows](#18-gouvernance-et-workflows) | 1 |
+| 10 | [Proxy base de données](#10-proxy-base-de-données) | 1 |
+| 11 | [Chaîne d'audit](#11-chaîne-daudit) | 11 |
+| 12 | [Lectures auditées](#12-lectures-auditées) | 5 |
+| 13 | [Enregistrement et relecture](#13-enregistrement-et-relecture) | 5 |
+| 14 | [Interfaces et notifications](#14-interfaces-et-notifications) | 6 |
+| 15 | [Déploiement, CI et chaîne d'approvisionnement](#15-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
+| 16 | [Agents distribués](#16-agents-distribués) | 9 |
+| 17 | [Posture de sécurité](#17-posture-de-sécurité) | 3 |
+| 18 | [Alignement UI, contrats et roadmap](#18-alignement-ui-contrats-et-roadmap) | 10 |
+| 19 | [Gouvernance et workflows](#19-gouvernance-et-workflows) | 1 |
 
 ### 1. Fondations du code
 
@@ -171,7 +172,16 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | 17 | [ADR-0101](0101-le-proxy-rdp-annonce-le-pipeline-graphique-avec-des-codecs-sans-perte.md) | Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement | Accepté |
 | 18 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
 
-### 10. Chaîne d'audit
+### 10. Proxy base de données
+
+Terminer le protocole SQL, séparer ticket opérateur et credential cible, et enregistrer les opérations sans exposer les paramètres sensibles.
+
+| Ordre | ID | Titre | Statut |
+|---|---|---|---|
+| 1 | [ADR-0139](0139-le-proxy-postgresql-termine-deux-canaux-tls-et-n-expose-aucun-secret.md) | Le proxy PostgreSQL termine deux canaux TLS et n’expose aucun secret cible | Accepté |
+| 2 | [ADR-0140](0140-contrats-de-session-et-denregistrement-des-operations-postgresql.md) | Les contrats PostgreSQL séparent l’établissement de session et l’acquittement des opérations | Proposé |
+
+### 11. Chaîne d'audit
 
 La trace : ce qu'elle accepte, comment elle est chaînée, ancrée, archivée, et ses alertes.
 
@@ -190,7 +200,7 @@ La trace : ce qu'elle accepte, comment elle est chaînée, ancrée, archivée, e
 | 11 | [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Accepté |
 | 12 | [ADR-0136](0136-provenance-des-evenements-par-identite-de-lappelant-mtls.md) | Attribuer l’émetteur d’un événement à l’appelant mTLS immédiat | Accepté |
 
-### 11. Lectures auditées
+### 12. Lectures auditées
 
 Toute lecture servie (session, enregistrement, demandes) est écrite avant d'être servie ; les refus sont budgétés.
 
@@ -202,7 +212,7 @@ Toute lecture servie (session, enregistrement, demandes) est écrite avant d'êt
 | 4 | [ADR-0023](0023-chaque-demande-servie-par-la-liste-des-demandes-en-attente-s.md) | Chaque demande servie par la liste des demandes en attente s'enregistre avant d'être servie — et sans enregistrement, la liste n'est pas servie | Accepté |
 | 5 | [ADR-0024](0024-auditer-les-refus-de-lecture-d-un-enregistrement-dans-un.md) | Auditer les refus de lecture d'un enregistrement, dans un budget par identité — et un seul seau à jetons, partagé (`pkg/refusalbudget`) | Accepté |
 
-### 12. Enregistrement et relecture
+### 13. Enregistrement et relecture
 
 Le stockage des sessions enregistrées, leur relecture et leur recherche.
 
@@ -214,7 +224,7 @@ Le stockage des sessions enregistrées, leur relecture et leur recherche.
 | 4 | [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Accepté |
 | 5 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
 
-### 13. Interfaces et notifications
+### 14. Interfaces et notifications
 
 Admin UI, portail utilisateur, système de conception, notifications vers les messageries.
 
@@ -227,7 +237,7 @@ Admin UI, portail utilisateur, système de conception, notifications vers les me
 | 5 | [ADR-0098](0098-le-client-desktop-est-natif-go-et-construit-avec-fyne.md) | Le client Desktop OpenBastion est une application native Go construite avec Fyne | Proposé |
 | 6 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté |
 
-### 14. Déploiement, CI et chaîne d'approvisionnement
+### 15. Déploiement, CI et chaîne d'approvisionnement
 
 Installer, vérifier à chaque commit, épingler, analyser et mettre à jour les dépendances.
 
@@ -242,7 +252,7 @@ Installer, vérifier à chaque commit, épingler, analyser et mettre à jour les
 | 7 | [ADR-0060](0060-les-images-sont-analysees-par-trivy-verifie-contre-son-empreinte.md) | Les images sont analysées par Trivy, un binaire vérifié contre son empreinte, jamais par ses actions ; ce qui est accepté l'est par écrit, par chemin et jusqu'à une date | Accepté |
 | 8 | [ADR-0094](0094-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté |
 
-### 15. Agents distribués
+### 16. Agents distribués
 
 Identité, transport, autorisations locales, durcissement, télémétrie, mise à jour, haute disponibilité et audit des agents.
 
@@ -258,7 +268,7 @@ Identité, transport, autorisations locales, durcissement, télémétrie, mise �
 | 8 | [ADR-0108](0108-les-binaires-et-politiques-agent-sont-signes-et-anti-retour.md) | Les binaires et politiques agent sont signés et protégés contre le retour arrière | Proposé |
 | 9 | [ADR-0109](0109-la-haute-disponibilite-des-agents-ne-reprend-pas-une-session-a-l-aveugle.md) | La haute disponibilité des agents ne reprend pas une session à l'aveugle | Proposé |
 
-### 16. Posture de sécurité
+### 17. Posture de sécurité
 
 Agrégation des constats, preuve d’intégrité et santé des composants présentées dans le Centre de sécurité.
 
@@ -269,7 +279,7 @@ Agrégation des constats, preuve d’intégrité et santé des composants prése
 | 3 | [ADR-0120](0120-la-sante-des-composants-est-publiee-sans-exposer-la-topologie-interne.md) | La santé des composants est publiée sans exposer la topologie interne | Proposé |
 
 
-### 17. Alignement UI, contrats et roadmap
+### 18. Alignement UI, contrats et roadmap
 
 Traçabilité des écrans, supervision, workflow, secrets dynamiques, alertes et détection de risque.
 
@@ -290,7 +300,7 @@ Traçabilité des écrans, supervision, workflow, secrets dynamiques, alertes et
 | 13 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
 | 14 | [ADR-0134](0134-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Accepté |
 
-### 18. Gouvernance et workflows
+### 19. Gouvernance et workflows
 
 Hiérarchie des approbateurs, définition et exécution des processus de validation.
 
@@ -442,3 +452,6 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0136](0136-provenance-des-evenements-par-identite-de-lappelant-mtls.md) | Attribuer l’émetteur d’un événement à l’appelant mTLS immédiat | Accepté | Chaîne d’audit |
 | [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) | La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites | Accepté, mise en œuvre en cours | Interfaces et notifications |
 | [ADR-0138](0138-hierarchie-des-approbateurs-administree-dans-openbastion.md) | La hiérarchie des approbateurs est administrée dans OpenBastion | Accepté | Gouvernance et workflows |
+| [ADR-0139](0139-le-proxy-postgresql-termine-deux-canaux-tls-et-n-expose-aucun-secret.md) | Le proxy PostgreSQL termine deux canaux TLS et n’expose aucun secret cible | Accepté | Proxy base de données |
+
+| [ADR-0140](0140-contrats-de-session-et-denregistrement-des-operations-postgresql.md) | Les contrats PostgreSQL séparent l’établissement de session et l’acquittement des opérations | Proposé | Proxy base de données |

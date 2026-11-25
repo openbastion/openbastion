@@ -20,6 +20,7 @@ var ErrSessionExpired = errors.New("session expired")
 // deliberately free of any secret material.
 type SessionMetadata struct {
 	SessionID  string
+	ActorID    string
 	TargetHost string
 	ScopeToken string
 

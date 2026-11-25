@@ -224,6 +224,10 @@ var notMirrored = map[string]string{
 	"authentication/DirectoryEntryConfig":                  "idem",
 	"session-broker/secretInjectionOutcomeUnknownBody":     "HTTP error response DTO for the proxy client; carries the explicit outcome_unknown status and operation ID",
 	"session-broker/secretInjectionOutcomeUnknownResponse": "Broker REST response DTO; an HTTP-facing status not represented by the empty gRPC success response",
+	"database-proxy/establishSessionRequest":               "private Session Broker-to-Database Proxy HTTP/JSON control contract for PostgreSQL sessions (ADR-0139); exact gRPC contract is intentionally deferred until the cross-service contract increment",
+	"database-proxy/establishSessionResponse":              "private Database Proxy HTTP/JSON response carrying only the proxy endpoint and opaque one-use ticket (ADR-0139); exact gRPC contract is intentionally deferred",
+	"database-proxy/revokeSessionRequest":                  "private Session Broker-to-Database Proxy HTTP/JSON revocation request (ADR-0139); exact gRPC contract is intentionally deferred",
+	"database-proxy/revokeSessionResponse":                 "private Database Proxy HTTP/JSON revocation counts (ADR-0139); exact gRPC contract is intentionally deferred",
 	"rdp-vnc-proxy/secretInjectionOutcomeUnknownResponse":  "proxy HTTP error response DTO; an HTTP-facing status not represented by the empty gRPC success response",
 	"ssh-proxy/secretInjectionOutcomeUnknownResponse":      "proxy HTTP error response DTO; an HTTP-facing status not represented by the empty gRPC success response",
 }

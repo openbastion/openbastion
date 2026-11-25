@@ -112,7 +112,7 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		out := run("", "run", "--rm", "--no-deps", "-T", "--entrypoint", "sh", "-v", "obcompose-test_pki:/look:ro", "pki",
 			"-c", "cd /look && find . -type f | sort")
 		want := ""
-		for _, svc := range []string{"admin-cli", "api-gateway", "audit-service", "authentication", "authorization", "command-recorder", "password-vault", "rdp-vnc-proxy", "seaweedfs", "session-broker", "ssh-proxy", "video-recorder", "workflow-service"} {
+		for _, svc := range []string{"admin-cli", "api-gateway", "audit-service", "authentication", "authorization", "command-recorder", "database-proxy", "password-vault", "rdp-vnc-proxy", "seaweedfs", "session-broker", "ssh-proxy", "video-recorder", "workflow-service"} {
 			want += "./" + svc + "/ca.pem\n./" + svc + "/cert.pem\n./" + svc + "/key.pem\n"
 			if svc == "session-broker" {
 				// ADR-0116: the HMAC key of the session metadata, the Broker's alone, drawn once.
