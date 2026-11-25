@@ -145,6 +145,59 @@ func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
 	destination[3] = 0xff
 }
 
+// applyRDPROP3 evaluates the eight-bit GDI ROP3 truth table independently for each RGB bit.
+// The truth-table index is P:S:D, with destination as the least significant input bit.
+func applyRDPROP3(destination, source []byte, pattern [4]byte, operation byte) {
+	for channel := 0; channel < 3; channel++ {
+		d, src, pat := destination[channel], source[channel], pattern[channel]
+		switch operation {
+		case 0x00: // BLACKNESS
+			destination[channel] = 0
+		case 0x55: // DSTINVERT
+			destination[channel] = ^d
+		case 0x5a: // PATINVERT
+			destination[channel] = d ^ pat
+		case 0x66: // SRCINVERT
+			destination[channel] = src ^ d
+		case 0x88: // SRCAND
+			destination[channel] = src & d
+		case 0xaa: // DSTCOPY
+			destination[channel] = d
+		case 0xcc: // SRCCOPY
+			destination[channel] = src
+		case 0xee: // SRCPAINT
+			destination[channel] = src | d
+		case 0xf0: // PATCOPY
+			destination[channel] = pat
+		case 0xff: // WHITENESS
+			destination[channel] = 0xff
+		default:
+			// Shannon expansion on P: each nibble is a two-input S/D truth table.
+			low := applyRDPROP2TruthTable(operation&0x0f, src, d)
+			high := applyRDPROP2TruthTable(operation>>4, src, d)
+			destination[channel] = (low &^ pat) | (high & pat)
+		}
+	}
+	destination[3] = 0xff
+}
+
+func applyRDPROP2TruthTable(operation, source, destination byte) byte {
+	var result byte
+	if operation&0x01 != 0 {
+		result |= ^source & ^destination
+	}
+	if operation&0x02 != 0 {
+		result |= ^source & destination
+	}
+	if operation&0x04 != 0 {
+		result |= source & ^destination
+	}
+	if operation&0x08 != 0 {
+		result |= source & destination
+	}
+	return result
+}
+
 // Unchanged reports that update only repaints what is already shown. A server may resend its screen
 // many times a second (FreeRDP's shadow: about 50): each frame costs a PNG and a recorded,
 // acknowledged segment, for nothing to see. Only plain replacements can be judged; anything else
@@ -321,6 +374,10 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 				uint32(rect.sourceY)+uint32(rect.Height) > uint32(bounds.Dy()) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
+		case rdpBitmapRectangleROP3:
+			if pixels*4 != uint64(len(rect.Pixels)) || rect.patternColor[3] != 0xff {
+				return screenstream.Message{}, ErrRDPFramebuffer
+			}
 		case rdpBitmapRectangleLine:
 			// Line points and color were validated above.
 		case rdpBitmapRectanglePolygon:
@@ -430,6 +487,16 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 				for x := 0; x < int(span.Width); x++ {
 					pixel := f.image.Pix[start+x*4 : start+x*4+4]
 					applyRDPROP2(pixel, rect.ellipseColor, rect.ellipseROP2)
+				}
+			}
+		case rdpBitmapRectangleROP3:
+			for y := 0; y < int(rect.Height); y++ {
+				destinationStart := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
+				sourceStart := y * int(rect.Width) * 4
+				for x := 0; x < int(rect.Width); x++ {
+					dst := f.image.Pix[destinationStart+x*4 : destinationStart+x*4+4]
+					src := rect.Pixels[sourceStart+x*4 : sourceStart+x*4+4]
+					applyRDPROP3(dst, src, rect.patternColor, rect.rop3)
 				}
 			}
 		case rdpBitmapRectangleScrCopy:

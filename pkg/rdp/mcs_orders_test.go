@@ -1325,6 +1325,9 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2Black, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2White, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestRDPRev2BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap()), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(2, append(mcsTestRDPRev2BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap()), mcsTestRDPMemBltOrder(0, 0, 0, 0, 2, 2, 0xcc, 0, 0)...), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(2, append(mcsTestRDPRev3BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap()), mcsTestRDPMem3BltOrder(0, 0, 0, 0, 2, 2, 0xf0, 0, 0, [3]byte{1, 2, 3}, 0)...), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _, _ = parseRDPOrdersUpdateData(data, 64, 64, rdpPrimaryOrderState{})

@@ -165,13 +165,14 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | 10 | [ADR-0087](0087-contrats-transverses-des-bibliotheques-protocolaires-ssh-rdp-vnc.md) | Les bibliothèques SSH, RDP et VNC partagent des contrats PAM sans partager leurs moteurs protocolaires | Proposé |
 | 11 | [ADR-0090](0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md) | RDP en v0.0.2 : glyphes, ordres graphiques, canaux virtuels et protocoles, par incréments prouvés | Proposé |
 | 12 | [ADR-0141](0141-le-client-rdp-annonce-dstblt-apres-decoder-son-profil-complet.md) | Le client RDP annonce DstBlt seulement après décodage de son profil complet | Accepté |
-| 13 | [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Accepté |
-| 14 | [ADR-0096](0096-le-presse-papiers-rdp-texte-par-sens-enregistre-et-audite.md) | Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité | Accepté |
-| 15 | [ADR-0097](0097-un-secret-du-vault-est-saisi-dans-la-session-par-le-proxy-jamais-par-le-presse-papiers.md) | Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement | Accepté |
-| 16 | [ADR-0099](0099-la-licence-rds-complete-est-geree-sans-consommer-une-cal-par-connexion.md) | Le client RDP gère la licence RDS complète, sans consommer une licence d'accès par connexion | Accepté |
-| 17 | [ADR-0100](0100-credssp-accepte-kerberos-a-cote-de-ntlmv2-pour-les-domaines-sans-ntlm.md) | CredSSP accepte Kerberos à côté de NTLMv2, pour les domaines qui ferment NTLM | Accepté |
-| 18 | [ADR-0101](0101-le-proxy-rdp-annonce-le-pipeline-graphique-avec-des-codecs-sans-perte.md) | Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement | Accepté |
-| 19 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
+| 13 | [ADR-0142](0142-cache-bitmap-rdp-v2-v3-et-ordres-memblt.md) | Le cache bitmap RDP v2/v3 n'est annoncé qu'avec MemBlt et Mem3Blt bornés | Accepté |
+| 14 | [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Accepté |
+| 15 | [ADR-0096](0096-le-presse-papiers-rdp-texte-par-sens-enregistre-et-audite.md) | Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité | Accepté |
+| 16 | [ADR-0097](0097-un-secret-du-vault-est-saisi-dans-la-session-par-le-proxy-jamais-par-le-presse-papiers.md) | Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement | Accepté |
+| 17 | [ADR-0099](0099-la-licence-rds-complete-est-geree-sans-consommer-une-cal-par-connexion.md) | Le client RDP gère la licence RDS complète, sans consommer une licence d'accès par connexion | Accepté |
+| 18 | [ADR-0100](0100-credssp-accepte-kerberos-a-cote-de-ntlmv2-pour-les-domaines-sans-ntlm.md) | CredSSP accepte Kerberos à côté de NTLMv2, pour les domaines qui ferment NTLM | Accepté |
+| 19 | [ADR-0101](0101-le-proxy-rdp-annonce-le-pipeline-graphique-avec-des-codecs-sans-perte.md) | Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement | Accepté |
+| 20 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
 
 ### 10. Proxy base de données
 
@@ -457,3 +458,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 
 | [ADR-0140](0140-contrats-de-session-et-denregistrement-des-operations-postgresql.md) | Les contrats PostgreSQL séparent l’établissement de session et l’acquittement des opérations | Proposé | Proxy base de données |
 | [ADR-0141](0141-le-client-rdp-annonce-dstblt-apres-decoder-son-profil-complet.md) | Le client RDP annonce DstBlt seulement après décodage de son profil complet | Accepté | Proxy écran RDP et VNC |
+| [ADR-0142](0142-cache-bitmap-rdp-v2-v3-et-ordres-memblt.md) | Le cache bitmap RDP v2/v3 n'est annoncé qu'avec MemBlt et Mem3Blt bornés | Accepté | Proxy écran RDP et VNC |

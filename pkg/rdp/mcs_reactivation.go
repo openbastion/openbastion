@@ -112,6 +112,7 @@ func (s *CredSSPClientSession) reactivate(ctx context.Context, conn *tls.Conn, d
 
 	s.mu.Lock()
 	s.serverCapabilities = cloneRDPServerCapabilities(capabilities)
+	clearRDPBitmapCacheState(&s.primaryOrderState)
 	s.primaryOrderState = rdpPrimaryOrderState{}
 	setRDPPrimaryOrderProfileLocked(s)
 	s.capabilitiesExchanged, s.connectionFinalized = true, true

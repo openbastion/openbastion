@@ -102,6 +102,8 @@ type CredSSPClientSession struct {
 	primaryOrdersEnabled    bool
 	patBltOpaqueRectEnabled bool
 	dstBltEnabled           bool
+	memBltEnabled           bool
+	mem3BltEnabled          bool
 	scrBltEnabled           bool
 	multiDstBltEnabled      bool
 	multiPatBltEnabled      bool
@@ -157,12 +159,23 @@ func (s *CredSSPClientSession) Close() {
 	if s == nil {
 		return
 	}
+	// Do not wait for an in-flight network read: closing the transport must interrupt it.
+	// When idle, take readMu and wipe cached pixels; an active reader wipes its local snapshot
+	// after it observes the closed transport.
+	readLocked := s.readMu.TryLock()
+	if readLocked {
+		defer s.readMu.Unlock()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.transport != nil {
 		_ = s.transport.Close()
 		s.transport = nil
 	}
+	if readLocked {
+		clearRDPBitmapCacheState(&s.primaryOrderState)
+	}
+	s.primaryOrderState = rdpPrimaryOrderState{}
 }
 
 // EstablishCredSSP performs the strict NTLM-only SPNEGO exchange over the
@@ -529,6 +542,8 @@ func (s *CredSSPClientSession) closeTransportLocked() {
 		_ = s.transport.Close()
 		s.transport = nil
 	}
+	clearRDPBitmapCacheState(&s.primaryOrderState)
+	s.primaryOrderState = rdpPrimaryOrderState{}
 }
 
 func ntlmCurrentFiletime() (value [8]byte) {

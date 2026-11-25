@@ -5664,3 +5664,16 @@ Validation de l'incrément 65 :
 - Tests TLS : Confirm Active annonce DstBlt, la session lit/rend l'ordre, l'état de champs persiste entre deux PDU, la réactivation réinitialise le cache, et `DSTCOPY` est consommé sans frame inchangée.
 - `gofmt` et `git diff --check` : **PASS**.
 - Les tests Windows Server 2019/2022 ne sont pas exécutés localement conformément à la consigne ; ils restent obligatoires dans la CI de la PR. Aucune interopérabilité Windows/RDS réelle n'est revendiquée avant ce résultat.
+
+
+## Incrément RDP — cache bitmap v2/v3 et MemBlt/Mem3Blt (PR à ouvrir)
+
+- Base : `main` après PR #319 (`654faf358c7fb934d3fdb6389d430b26d9f4d3e0`). Branche : `feat/rdp-bitmap-cache-v2-v3`.
+- ADR-0142 accepté : le cache bitmap v2/v3 n'est annoncé qu'avec MemBlt et Mem3Blt bornés. Profil 32 bpp uniquement ; les sessions 15/16 bpp restent sans cache.
+- Capabilities : `TS_BITMAPCACHE_REV2` (un cache, 256 entrées, sans persistance ni waiting list), `MemBlt`/`Mem3Blt` et `ORDERFLAGS_EX_CACHE_BITMAP_REV3_SUPPORT` avec `ORDERFLAGS_EXTRA_FLAGS`.
+- Secondaires : Cache Bitmap rév. 2 brut/RDP6 avec ou sans `bitmapComprHdr`, rév. 3 `codecID=0` brut ; `orderLength + 13`, encodages unsigned 2/4 octets, références et dimensions strictement bornées.
+- Primaires : MemBlt ROP3 sans motif ; Mem3Blt ROP3 avec brosse `BS_SOLID`. Champs omis, coordonnées delta, bornes partagées, clipping, cache indexé par partage, ROP3 appliqué dans le framebuffer. `DSTCOPY` est consommé sans trame.
+- Cache : 256 entrées, 16 Mio par bitmap, 32 Mio d'état commis par partage (64 Mio transitoires maximum pendant un PDU transactionnel) ; état cloné et commis seulement après décodage complet du PDU ; réinitialisation à la réactivation/fermeture. `Close()` reste capable d'interrompre une lecture bloquée ; le chemin actif efface son snapshot avant de sortir.
+- Tests ajoutés : caches rév. 2/3, compression RDP6 avec/sans en-tête, MemBlt/Mem3Blt, clipping/deltas/champs omis, ROP3, limites mémoire, rollback atomique, capabilities par profondeur, réactivation, fermeture, TLS et seeds fuzz.
+- Validation locale : `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` PASS ; `go test -race ./pkg/rdp -count=1` PASS ; `cd services/proxy/rdp-vnc-proxy && go test -race ./... -count=1` PASS ; `FuzzParseRDPOrdersUpdate` PASS (55 065 exécutions en 5 s, 11 nouveaux cas intéressants) ; `git diff --check` PASS.
+- Les tests Windows Server 2019/2022 restent exclusivement en CI. Aucun test Windows exécuté localement.

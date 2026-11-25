@@ -143,17 +143,23 @@ func TestReadBitmapUpdateReactivates(t *testing.T) {
 		}
 		return nil
 	})
-	// The primary-order state of the old share does not carry over to the new one.
-	session.primaryOrderState = rdpPrimaryOrderState{orderType: rdpOrderPolyline, hasOrderType: true}
+	// Neither primary-order state nor bitmap cache of the old share carries over to the new one.
+	oldPixels := []byte{1, 2, 3, 0xff}
+	oldState := rdpPrimaryOrderState{orderType: rdpOrderPolyline, hasOrderType: true}
+	if err := storeRDPBitmapCache(&oldState, 0, 1, 1, oldPixels); err != nil {
+		t.Fatal(err)
+	}
+	session.primaryOrderState = oldState
 	update, err := session.ReadBitmapUpdate(context.Background(), 2*time.Second)
 	if err != nil {
 		t.Fatalf("ReadBitmapUpdate: %v", err)
 	}
 	if session.primaryOrderState.hasOrderType || session.primaryOrderState.bounds != [4]int32{} ||
-		session.primaryOrderState.dstBltFields != [5]int32{} {
-		t.Fatal("the primary-order state of the old share survived the reactivation")
+		session.primaryOrderState.dstBltFields != [5]int32{} || session.primaryOrderState.cache != nil || oldPixels[0] != 0 {
+		t.Fatal("the primary-order state or bitmap cache of the old share survived the reactivation")
 	}
-	if !session.primaryOrdersEnabled || !session.dstBltEnabled || session.patBltOpaqueRectEnabled || session.scrBltEnabled {
+	if !session.primaryOrdersEnabled || !session.dstBltEnabled || !session.memBltEnabled || !session.mem3BltEnabled ||
+		session.patBltOpaqueRectEnabled || session.scrBltEnabled {
 		t.Fatalf("new share did not restore exactly the negotiated DstBlt profile: %+v", session)
 	}
 	if update.DesktopWidth != 1024 || update.DesktopHeight != 768 || len(update.Rectangles) != 1 || update.Rectangles[0].X != 1000 {

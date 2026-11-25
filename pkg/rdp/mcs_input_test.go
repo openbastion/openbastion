@@ -239,10 +239,16 @@ func TestCloseInterruptsBlockedBitmapRead(t *testing.T) {
 	if err := tlsConn.Handshake(); err != nil {
 		t.Fatal(err)
 	}
+	cachePixels := []byte{1, 2, 3, 0xff}
+	cacheState := rdpPrimaryOrderState{}
+	if err := storeRDPBitmapCache(&cacheState, 0, 1, 1, cachePixels); err != nil {
+		t.Fatal(err)
+	}
 	session := &CredSSPClientSession{
 		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
 		mcsResponse:   MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 		userChannelID: 1007, serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 1, DesktopHeight: 1},
+		primaryOrderState: cacheState,
 	}
 	readResult := make(chan error, 1)
 	go func() {
@@ -260,6 +266,9 @@ func TestCloseInterruptsBlockedBitmapRead(t *testing.T) {
 	}
 	if err := <-serverResult; err != nil {
 		t.Fatal(err)
+	}
+	if session.primaryOrderState.cache != nil || cachePixels[0] != 0 {
+		t.Fatalf("blocked read did not release and erase its cache: state=%+v pixels=%v", session.primaryOrderState, cachePixels)
 	}
 }
 
