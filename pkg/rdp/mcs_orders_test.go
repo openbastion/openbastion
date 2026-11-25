@@ -774,11 +774,9 @@ func TestParseRDPOrdersUpdateRejectsUnsupportedDstBltProfiles(t *testing.T) {
 	valid := mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0x00)
 	cases := map[string][]byte{
 		"source-dependent ROP":        mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0xcc),
-		"unsupported destination ROP": mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0xaa),
+		"unsupported destination ROP": mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0x01),
 		"missing initial type change": mcsTestDstBltOrder(0x01, false, 1, 1, 2, 2, 0x00),
 		"wrong field mask":            func() []byte { out := append([]byte(nil), valid...); out[2] = 0x0f; return out }(),
-		"negative coordinate":         mcsTestDstBltOrder(0x09, true, -1, 1, 2, 2, 0x00),
-		"outside desktop":             mcsTestDstBltOrder(0x09, true, 7, 7, 2, 2, 0xff),
 		"zero height":                 mcsTestDstBltOrder(0x09, true, 1, 1, 2, 0, 0x00),
 		"truncated order":             valid[:len(valid)-1],
 		"delta coordinates":           mcsTestDstBltOrder(0x19, true, 1, 1, 2, 2, 0x00),
@@ -804,6 +802,227 @@ func mcsTestDstBltOrder(controlFlags byte, typeChange bool, left, top, width, he
 		out = append(out, encoded[:]...)
 	}
 	return append(out, rop)
+}
+
+func mcsTestDstBltRawOrder(control byte, typeChange bool, fieldFlags []byte, bounds, fields []byte) []byte {
+	out := []byte{control}
+	if typeChange {
+		out = append(out, rdpOrderDstBlt)
+	}
+	out = append(out, fieldFlags...)
+	out = append(out, bounds...)
+	return append(out, fields...)
+}
+
+func TestParseRDPDstBltSupportsCachedFieldsAndDeltaCoordinates(t *testing.T) {
+	first := mcsTestDstBltOrder(0x09, true, 2, 2, 3, 2, rdpDstBltBlackness)
+	second := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderDeltaCoordinates, false, []byte{0x03}, nil,
+		[]byte{0x01, 0xff}) // left +1, top -1; other fields are reused.
+	orders := append(first, second...)
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(2, orders, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][4]uint16{{2, 2, 3, 2}, {3, 1, 3, 2}}
+	if len(got.Rectangles) != len(want) || !state.dstBltUsed || state.dstBltFields != [5]int32{3, 1, 3, 2, int32(rdpDstBltBlackness)} {
+		t.Fatalf("DstBlt cached update = %+v, state=%+v", got, state)
+	}
+	for i, rect := range got.Rectangles {
+		if [4]uint16{rect.X, rect.Y, rect.Width, rect.Height} != want[i] {
+			t.Errorf("rectangle %d = %+v, want %v", i, rect, want[i])
+		}
+	}
+}
+
+func TestParseRDPDstBltSupportsOmittedFieldsAndBounds(t *testing.T) {
+	first := mcsTestDstBltOrder(0x09, true, 1, 1, 5, 5, rdpDstBltBlackness)
+	// One zero field-flag byte is omitted. Bounds are inclusive: [2,2]-[3,3].
+	second := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds|rdpOrderZeroFieldByteBit0, false, nil,
+		[]byte{0x0f, 2, 0, 2, 0, 3, 0, 3, 0}, nil)
+	// Reuse the previous bounds and all five previous DstBlt fields.
+	third := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds|rdpOrderZeroBoundsDeltas|rdpOrderZeroFieldByteBit0,
+		false, nil, nil, nil)
+	orders := append(append(first, second...), third...)
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(3, orders, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][4]uint16{{1, 1, 5, 5}, {2, 2, 2, 2}, {2, 2, 2, 2}}
+	if len(got.Rectangles) != len(want) || state.bounds != [4]int32{2, 2, 3, 3} {
+		t.Fatalf("DstBlt bounded update = %+v, state=%+v", got, state)
+	}
+	for i, rect := range got.Rectangles {
+		if [4]uint16{rect.X, rect.Y, rect.Width, rect.Height} != want[i] {
+			t.Errorf("rectangle %d = %+v, want %v", i, rect, want[i])
+		}
+	}
+}
+
+func TestParseRDPDstBltSupportsDeltaBoundsAndDestinationCopy(t *testing.T) {
+	first := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds|rdpOrderTypeChange, true, []byte{0x1f},
+		[]byte{0x0f, 2, 0, 2, 0, 5, 0, 5, 0},
+		[]byte{1, 0, 1, 0, 5, 0, 5, 0, rdpDstBltBlackness})
+	// Shift the left/top bounds by +1/-1, and change the ROP to DSTCOPY (no visible change).
+	second := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds, false, []byte{0x10},
+		[]byte{0x30, 1, 0xff}, []byte{rdpDstBltCopy})
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(2, append(first, second...), 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rectangles) != 1 || state.bounds != [4]int32{3, 1, 5, 5} || state.dstBltFields[4] != int32(rdpDstBltCopy) {
+		t.Fatalf("DstBlt delta-bounds/DSTCOPY = %+v, state=%+v", got, state)
+	}
+}
+
+func TestReadBitmapUpdateCarriesDstBltFieldCacheAcrossPDUs(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	const shareID = uint32(0x000103ea)
+	firstOrder := mcsTestDstBltOrder(rdpOrderStandard|rdpOrderTypeChange, true, 1, 1, 2, 2, rdpDstBltWhiteness)
+	secondOrder := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderDeltaCoordinates, false, []byte{0x03}, nil, []byte{1, 0})
+	stream := append(mcsTestOrdersUpdatePacket(shareID, 1, firstOrder), mcsTestOrdersUpdatePacket(shareID, 1, secondOrder)...)
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+			acceptErr = writeFull(tlsConn, stream)
+		}
+		serverResult <- acceptErr
+	}()
+	raw, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(raw, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		primaryOrdersEnabled: true, dstBltEnabled: true,
+		mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities: RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
+	}
+	first, firstErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	second, secondErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if firstErr != nil || secondErr != nil || len(first.Rectangles) != 1 || len(second.Rectangles) != 1 ||
+		first.Rectangles[0].X != 1 || first.Rectangles[0].Y != 1 || second.Rectangles[0].X != 2 || second.Rectangles[0].Y != 1 ||
+		session.primaryOrderState.dstBltFields != [5]int32{2, 1, 2, 2, int32(rdpDstBltWhiteness)} {
+		t.Fatalf("first=%+v (%v), second=%+v (%v), state=%+v", first, firstErr, second, secondErr, session.primaryOrderState)
+	}
+	session.Close()
+	if err := <-serverResult; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReadBitmapUpdateSkipsNoOpDstCopy(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	const shareID = uint32(0x000103ea)
+	noOp := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestDstBltOrder(rdpOrderStandard|rdpOrderTypeChange, true, 1, 1, 2, 2, rdpDstBltCopy))
+	bitmap := mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(3, 2, 1, 1, 32, 0, []byte{0x12, 0x34, 0x56, 0}))
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+			acceptErr = writeFull(tlsConn, append(noOp, bitmap...))
+		}
+		serverResult <- acceptErr
+	}()
+	raw, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(raw, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		primaryOrdersEnabled: true, dstBltEnabled: true,
+		mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities: RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
+	}
+	update, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(update.Rectangles) != 1 || update.Rectangles[0].X != 3 || update.Rectangles[0].Y != 2 ||
+		!session.primaryOrderState.dstBltUsed {
+		t.Fatalf("update after DSTCOPY = %+v, state=%+v, err=%v", update, session.primaryOrderState, readErr)
+	}
+	session.Close()
+	if err := <-serverResult; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestParseRDPDstBltRejectsCoordinateAndBoundsDeltaOverflow(t *testing.T) {
+	coordinateBase := mcsTestDstBltOrder(rdpOrderStandard|rdpOrderTypeChange, true, 32767, 1, 2, 2, rdpDstBltBlackness)
+	coordinateDelta := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderDeltaCoordinates, false, []byte{0x01}, nil, []byte{1})
+	coordinateOrders := append(coordinateBase, coordinateDelta...)
+	if _, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(2, coordinateOrders, 0, 0), 8, 8, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) || state != (rdpPrimaryOrderState{}) {
+		t.Fatalf("coordinate delta overflow: state=%+v, err=%v", state, err)
+	}
+
+	boundsBase := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds|rdpOrderTypeChange, true, []byte{0x1f},
+		[]byte{0x0f, 0xff, 0x7f, 0, 0, 0xff, 0x7f, 0, 0}, []byte{0, 0, 0, 0, 1, 0, 1, 0, rdpDstBltBlackness})
+	boundsDelta := mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds, false, []byte{0}, []byte{0x10, 1}, nil)
+	boundsOrders := append(boundsBase, boundsDelta...)
+	if _, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(2, boundsOrders, 0, 0), 8, 8, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) || state != (rdpPrimaryOrderState{}) {
+		t.Fatalf("bounds delta overflow: state=%+v, err=%v", state, err)
+	}
+}
+
+func TestParseRDPDstBltClipsToDesktopAndRejectsMalformedProfiles(t *testing.T) {
+	clipped := mcsTestDstBltOrder(0x09, true, -1, 1, 4, 3, rdpDstBltWhiteness)
+	got, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, clipped, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil || len(got.Rectangles) != 1 || [4]uint16{got.Rectangles[0].X, got.Rectangles[0].Y, got.Rectangles[0].Width, got.Rectangles[0].Height} != [4]uint16{0, 1, 3, 3} {
+		t.Fatalf("clipped DstBlt = %+v, err=%v", got, err)
+	}
+	outside := mcsTestDstBltOrder(0x09, true, 10, 10, 2, 2, rdpDstBltWhiteness)
+	clippedAway, clippedState, clipErr := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, outside, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if clipErr != nil || len(clippedAway.Rectangles) != 0 || !clippedState.dstBltUsed {
+		t.Fatalf("fully clipped DstBlt = %+v, state=%+v, err=%v", clippedAway, clippedState, clipErr)
+	}
+	base := mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, rdpDstBltBlackness)
+	cases := map[string][]byte{
+		"zero bounds deltas without bounds": mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderZeroBoundsDeltas, false, []byte{0}, nil, nil),
+		"too many omitted field bytes":      mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderZeroFieldByteMask, false, nil, nil, nil),
+		"reserved field flag":               mcsTestDstBltRawOrder(rdpOrderStandard, false, []byte{0x20}, nil, nil),
+		"truncated coordinate delta":        mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderDeltaCoordinates, false, []byte{0x01}, nil, nil),
+		"source-dependent ROP3":             mcsTestDstBltRawOrder(rdpOrderStandard, false, []byte{0x10}, nil, []byte{0xcc}),
+		"inverted bounds":                   mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds, false, []byte{0}, []byte{0x0f, 4, 0, 2, 0, 3, 0, 5, 0}, nil),
+	}
+	for name, malformed := range cases {
+		t.Run(name, func(t *testing.T) {
+			orders := append(append([]byte(nil), base...), malformed...)
+			_, state, parseErr := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(2, orders, 0, 0), 8, 8, rdpPrimaryOrderState{})
+			if !errors.Is(parseErr, ErrMCSConnection) || state != (rdpPrimaryOrderState{}) {
+				t.Fatalf("malformed DstBlt = state=%+v, err=%v", state, parseErr)
+			}
+		})
+	}
 }
 
 func TestParseRDPOrdersUpdateDecodesSolidPatInvert(t *testing.T) {
@@ -1014,6 +1233,15 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0xfa, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0x0f, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(2, append(
+		mcsTestDstBltOrder(0x09, true, 1, 1, 3, 2, rdpDstBltBlackness),
+		mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderDeltaCoordinates, false, []byte{0x03}, nil, []byte{1, 0xff})...),
+		0, 0))
+	f.Add(mcsTestOrdersUpdateData(2, append(
+		mcsTestDstBltOrder(0x09, true, 1, 1, 3, 2, rdpDstBltBlackness),
+		mcsTestDstBltRawOrder(rdpOrderStandard|rdpOrderBounds|rdpOrderZeroFieldByteBit0, false, nil,
+			[]byte{0x0f, 0, 0, 0, 0, 2, 0, 2, 0}, nil)...),
+		0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiDstBltOrder(0x09, true, 0, 0, 1, 1, rdpDstBltBlackness, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0x11, 0x22, 0x33, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiPatBltOrder(0x09, true, 0, 0, 1, 1, rdpPatBltPatCopy, [3]byte{}, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))

@@ -113,6 +113,7 @@ func (s *CredSSPClientSession) reactivate(ctx context.Context, conn *tls.Conn, d
 	s.mu.Lock()
 	s.serverCapabilities = cloneRDPServerCapabilities(capabilities)
 	s.primaryOrderState = rdpPrimaryOrderState{}
+	setRDPPrimaryOrderProfileLocked(s)
 	s.capabilitiesExchanged, s.connectionFinalized = true, true
 	s.reactivations++
 	// The channels outlive the share: what they sent meanwhile is read next (ADR-0095).

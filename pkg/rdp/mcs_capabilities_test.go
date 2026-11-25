@@ -165,11 +165,12 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(bitmap[20:22]) != 1 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
 		t.Fatalf("client Bitmap capability = %x", bitmap)
 	}
-	// DstBlt index 0 and the shared PatBlt/OpaqueRect index 1 remain disabled:
-	// these strict subsets do not cover every normative order variant.
+	// DstBlt index 0 is the only advertised primary order: its complete strict profile is decoded.
+	wantOrderSupport := make([]byte, 32)
+	wantOrderSupport[rdpOrderSupportDstBltIndex] = 1
 	if binary.LittleEndian.Uint16(caps[52:54]) != rdpCapOrder || binary.LittleEndian.Uint16(caps[54:56]) != 88 ||
 		binary.LittleEndian.Uint16(caps[82:84]) != 1 || binary.LittleEndian.Uint16(caps[86:88]) != 0x000a ||
-		!bytes.Equal(caps[88:120], make([]byte, 32)) ||
+		!bytes.Equal(caps[88:120], wantOrderSupport) ||
 		binary.LittleEndian.Uint16(caps[140:142]) != rdpCapPointer || binary.LittleEndian.Uint16(caps[144:146]) != 1 ||
 		binary.LittleEndian.Uint16(caps[150:152]) != rdpCapInput || binary.LittleEndian.Uint16(caps[154:156]) != 1 ||
 		binary.LittleEndian.Uint32(caps[162:166]) != rdpKeyboardEnhanced ||
@@ -259,6 +260,11 @@ func TestCredSSPSessionExchangeCapabilitiesOverTLS(t *testing.T) {
 			serverResult <- errors.New("Confirm Active parse: " + readErr.Error() + "; packet=" + fmt.Sprintf("%x", confirm))
 			return
 		}
+		order := mcsTestDstBltOrder(rdpOrderStandard|rdpOrderTypeChange, true, 2, 3, 2, 1, rdpDstBltWhiteness)
+		if acceptErr = writeFull(tlsConn, mcsTestOrdersUpdatePacket(0x000103ea, 1, order)); acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
 		serverResult <- nil
 	}()
 
@@ -288,12 +294,24 @@ func TestCredSSPSessionExchangeCapabilitiesOverTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExchangeCapabilities: %v", err)
 	}
-	if got.ShareID != 0x000103ea || !session.capabilitiesExchanged || session.serverCapabilities.ShareID != got.ShareID {
-		t.Fatalf("capability transition not persisted: got=%+v session=%+v", got, session.serverCapabilities)
+	if got.ShareID != 0x000103ea || !session.capabilitiesExchanged || session.serverCapabilities.ShareID != got.ShareID ||
+		!session.primaryOrdersEnabled || !session.dstBltEnabled || session.patBltOpaqueRectEnabled || session.scrBltEnabled ||
+		session.multiDstBltEnabled || session.multiPatBltEnabled || session.multiScrBltEnabled || session.lineToEnabled ||
+		session.polylineEnabled || session.polygonSCEnabled || session.ellipseSCEnabled || session.multiOpaqueRectEnabled {
+		t.Fatalf("capability transition/order profile not persisted: got=%+v session=%+v", got, session)
 	}
 	got.CapabilityTypes[0] = 0xffff
 	if session.serverCapabilities.CapabilityTypes[0] == 0xffff {
 		t.Fatal("returned capability types alias session state")
+	}
+	session.mu.Lock()
+	session.connectionFinalized = true // Isolate the update reader after the Confirm Active transition.
+	session.mu.Unlock()
+	update, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(update.Rectangles) != 1 || update.Rectangles[0].X != 2 || update.Rectangles[0].Y != 3 ||
+		update.Rectangles[0].operation != rdpBitmapRectangleReplace || len(update.Rectangles[0].Pixels) != 8 ||
+		!session.primaryOrderState.dstBltUsed {
+		t.Fatalf("negotiated DstBlt update = %+v, state=%+v, err=%v", update, session.primaryOrderState, readErr)
 	}
 	if _, err := session.ExchangeCapabilities(context.Background(), time.Second); !errors.Is(err, ErrMCSConnection) {
 		t.Fatalf("second capability exchange error = %v", err)
