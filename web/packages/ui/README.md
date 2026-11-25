@@ -29,3 +29,19 @@ Importer uniquement `@openbastion/design-tokens/styles.css`. Les tokens, styles 
 | Utilitaires | `image-helpers.js`, `isSafeImageSource`, `resolveImageSource` |
 
 `AspectRatio` n'est compté qu'une fois (il figurait deux fois dans la demande). `image-helpers.js` et `useToast` sont des utilitaires/hooks et non des composants visuels autonomes.
+
+
+## Shell : interactions génériques (incrément 4)
+
+Sans logique métier : libellés, actions et données arrivent par props ; le package ne crée aucun routeur.
+
+| Export | Rôle |
+|---|---|
+| `useAppTheme`, `AppThemeProvider`, `useEffectiveTheme` | Applique `data-theme` / `data-density` à la racine du document ; `system` suit `prefers-color-scheme`. La préférence est stockée par l'application. |
+| `useAppShortcuts` | Ctrl/Meta+K (palette) et Alt+Maj+1…n (destinations). Inhibé dans un champ de saisie ou si `suspended`. |
+| `useAppDismissable` | Échap et appui extérieur ferment une surface (menu, panneau). |
+| `AppMobileNavigation` | Comportement modal d'une navigation hors-champ : focus à l'ouverture, piège de Tab, Échap, retour du focus au bouton d'ouverture ; rend le fond (`navigation-backdrop`). Le conteneur reste celui de l'application (`role="dialog"` à l'ouverture). |
+| `AppUserMenu` | Menu à divulgation : déclencheur, panneau (`aria-label`), Échap, appui extérieur, retour du focus. Contenu et actions fournis en `children`. |
+| `AppCommandPalette` | Palette modale (combobox + listbox, flèches, Entrée, Échap, piège de Tab). L'application fournit les commandes déjà filtrées et tous les libellés. |
+
+Tests : `web/admin-ui/src/shared/ui-package-shell-interactions.test.tsx` et `ui-package-theme-shortcuts.test.tsx`.

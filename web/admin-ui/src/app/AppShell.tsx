@@ -1,5 +1,5 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
-import { useAppShortcuts, useAppTheme } from "@openbastion/ui";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AppMobileNavigation, AppUserMenu, useAppDismissable, useAppShortcuts, useAppTheme } from "@openbastion/ui";
 import {
   ApiDocumentation,
   Check,
@@ -98,15 +98,12 @@ export function AppShell({
   const menuButton = useRef<HTMLButtonElement>(null);
   const paletteButton = useRef<HTMLButtonElement>(null);
   const userMenuButton = useRef<HTMLButtonElement>(null);
-  const userMenuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const notificationsButton = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
-  const mobileWasOpen = useRef(false);
   const paletteWasOpen = useRef(false);
   const preferencesWereOpen = useRef(false);
-  const userMenuWasOpen = useRef(false);
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
   const collapsed = preferences.sidebarCollapsed;
   const favoriteTabs = shownTabs.filter((key) => preferences.favorites.includes(key));
@@ -144,7 +141,9 @@ export function AppShell({
     suspended: paletteOpen || preferencesOpen,
   });
 
-  useEffect(() => {
+  // A layout effect: it must run before the passive focus restorations of the child components
+  // (mobile navigation, user menu), which come after a navigation and win when both apply.
+  useLayoutEffect(() => {
     mainRef.current?.focus();
   }, [tab]);
 
@@ -157,27 +156,6 @@ export function AppShell({
     if (preferencesWereOpen.current && !preferencesOpen) userMenuButton.current?.focus();
     preferencesWereOpen.current = preferencesOpen;
   }, [preferencesOpen]);
-
-  useEffect(() => {
-    if (userMenuWasOpen.current && !userMenuOpen && !paletteOpen && !preferencesOpen) userMenuButton.current?.focus();
-    userMenuWasOpen.current = userMenuOpen;
-  }, [userMenuOpen, paletteOpen, preferencesOpen]);
-
-  useEffect(() => {
-    if (!userMenuOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setUserMenuOpen(false);
-    };
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !userMenuRef.current?.contains(event.target)) setUserMenuOpen(false);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => {
-      document.removeEventListener("keydown", closeOnEscape);
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-    };
-  }, [userMenuOpen]);
 
   useEffect(() => {
     if (!workspaceMenuOpen) return;
@@ -195,62 +173,15 @@ export function AppShell({
     };
   }, [workspaceMenuOpen]);
 
-  useEffect(() => {
-    if (!notificationsOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setNotificationsOpen(false);
-        notificationsButton.current?.focus();
-      }
-    };
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !notificationsRef.current?.contains(event.target)) setNotificationsOpen(false);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => {
-      document.removeEventListener("keydown", closeOnEscape);
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-    };
-  }, [notificationsOpen]);
-
-  useEffect(() => {
-    if (mobileWasOpen.current && !mobileOpen) menuButton.current?.focus();
-    mobileWasOpen.current = mobileOpen;
-  }, [mobileOpen]);
-
-  useEffect(() => {
-    if (!mobileOpen) return;
-    const sidebar = sidebarRef.current;
-    const focusable = () => Array.from(sidebar?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]):not(.sidebar-collapse-toggle), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ) ?? []);
-    focusable()[0]?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setMobileOpen(false);
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const items = focusable();
-      if (items.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && (document.activeElement === first || !sidebar?.contains(document.activeElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !sidebar?.contains(document.activeElement))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [mobileOpen]);
+  useAppDismissable({
+    open: notificationsOpen,
+    onClose: () => setNotificationsOpen(false),
+    containerRef: notificationsRef,
+    onEscape: () => {
+      setNotificationsOpen(false);
+      notificationsButton.current?.focus();
+    },
+  });
 
   function renderNavItem(key: Tab) {
     const Icon = tabs[key].icon;
@@ -305,15 +236,13 @@ export function AppShell({
         />
       ) : null}
       <div className={"app-workspace" + (collapsed ? " sidebar-collapsed" : "") + (mobileOpen ? " mobile-navigation-open" : "")}>
-        {mobileOpen && (
-          <button
-            type="button"
-            className="navigation-backdrop"
-            aria-hidden="true"
-            tabIndex={-1}
-            onClick={() => setMobileOpen(false)}
-          />
-        )}
+        <AppMobileNavigation
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          containerRef={sidebarRef}
+          returnFocusRef={menuButton}
+          excludeSelector=".sidebar-collapse-toggle"
+        />
         <aside
           ref={sidebarRef}
           id="admin-navigation"
@@ -393,49 +322,45 @@ export function AppShell({
             </div>
             <p>{t("shell.sidebar.statusDetail")}</p>
           </div>
-          <div className="sidebar-user-menu" ref={userMenuRef}>
-            <button
-              ref={userMenuButton}
-              type="button"
-              className="user-menu-trigger sidebar-user-menu-trigger"
-              aria-haspopup="true"
-              aria-expanded={userMenuOpen}
-              aria-controls="operator-menu"
-              onClick={() => setUserMenuOpen((open) => !open)}
-            >
-              <span className="avatar" aria-hidden="true">{initials}</span>
-              <span className="user-menu-identity">
-                <strong>{who?.username}</strong>
-                <small>{who?.roles[0] ?? t("shell.user.defaultRole")}</small>
-              </span>
-              <ChevronDown className="user-menu-chevron" size={16} />
-            </button>
-            {userMenuOpen ? (
-              <div className="user-menu-panel sidebar-user-menu-panel" id="operator-menu" aria-label={t("shell.user.menuLabel")}>
-                <div className="user-menu-summary">
+          <AppUserMenu
+            open={userMenuOpen}
+            onOpenChange={setUserMenuOpen}
+            triggerRef={userMenuButton}
+            restoreFocus={!paletteOpen && !preferencesOpen}
+            label={t("shell.user.menuLabel")}
+            trigger={(
+              <>
+                <span className="avatar" aria-hidden="true">{initials}</span>
+                <span className="user-menu-identity">
                   <strong>{who?.username}</strong>
-                  <span>{who?.roles.join(", ") || t("shell.user.defaultRole")}</span>
-                </div>
-                <div className="user-menu-section">
-                  <span>{t("common.language.label")}</span>
-                  <LanguageSwitcher />
-                </div>
-                <div className="user-menu-section">
-                  <span>{t("shell.theme.label")}</span>
-                  <button type="button" className="user-menu-item" aria-label={theme === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: theme === "light" ? "dark" : "light" })}>
-                    {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
-                    {theme === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
-                  </button>
-                </div>
-                <button type="button" className="user-menu-item" onClick={() => { setPreferencesOpen(true); setUserMenuOpen(false); }}>
-                  <Settings size={17} />{t("shell.preferences.label")}
-                </button>
-                <button type="button" className="user-menu-item user-menu-signout" onClick={() => { setUserMenuOpen(false); onSignOut(); }}>
-                  {t("shell.signOut")}
-                </button>
-              </div>
-            ) : null}
-          </div>
+                  <small>{who?.roles[0] ?? t("shell.user.defaultRole")}</small>
+                </span>
+                <ChevronDown className="user-menu-chevron" size={16} />
+              </>
+            )}
+          >
+            <div className="user-menu-summary">
+              <strong>{who?.username}</strong>
+              <span>{who?.roles.join(", ") || t("shell.user.defaultRole")}</span>
+            </div>
+            <div className="user-menu-section">
+              <span>{t("common.language.label")}</span>
+              <LanguageSwitcher />
+            </div>
+            <div className="user-menu-section">
+              <span>{t("shell.theme.label")}</span>
+              <button type="button" className="user-menu-item" aria-label={theme === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: theme === "light" ? "dark" : "light" })}>
+                {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
+                {theme === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
+              </button>
+            </div>
+            <button type="button" className="user-menu-item" onClick={() => { setPreferencesOpen(true); setUserMenuOpen(false); }}>
+              <Settings size={17} />{t("shell.preferences.label")}
+            </button>
+            <button type="button" className="user-menu-item user-menu-signout" onClick={() => { setUserMenuOpen(false); onSignOut(); }}>
+              {t("shell.signOut")}
+            </button>
+          </AppUserMenu>
         </aside>
         <div className="app-content">
           <header className="app-header" inert={mobileOpen}>
