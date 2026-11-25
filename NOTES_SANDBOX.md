@@ -5666,10 +5666,10 @@ Validation de l'incrément 65 :
 - Les tests Windows Server 2019/2022 ne sont pas exécutés localement conformément à la consigne ; ils restent obligatoires dans la CI de la PR. Aucune interopérabilité Windows/RDS réelle n'est revendiquée avant ce résultat.
 
 
-## Incrément RDP — cache bitmap v2/v3 et MemBlt/Mem3Blt (PR à ouvrir)
+## Incrément RDP — cache bitmap v2/v3 et MemBlt/Mem3Blt (PR #321)
 
-- Base : `main` après PR #319 (`654faf358c7fb934d3fdb6389d430b26d9f4d3e0`). Branche : `feat/rdp-bitmap-cache-v2-v3`.
-- ADR-0142 accepté : le cache bitmap v2/v3 n'est annoncé qu'avec MemBlt et Mem3Blt bornés. Profil 32 bpp uniquement ; les sessions 15/16 bpp restent sans cache.
+- PR : https://github.com/openbastion/openbastion/pull/321. Commit fonctionnel : `ef292ee7ffe15fc2c65e25c14ea6fbcddb6f0d5f`. Branche : `feat/rdp-bitmap-cache-v2-v3`, basée sur `main` après PR #319 (`654faf358c7fb934d3fdb6389d430b26d9f4d3e0`).
+- ADR-0142 accepté : le cache bitmap v2/v3 et MemBlt/Mem3Blt ne sont annoncés qu'en profil 32 bpp borné ; DstBlt reste disponible en 15/16 bpp, sans cache.
 - Capabilities : `TS_BITMAPCACHE_REV2` (un cache, 256 entrées, sans persistance ni waiting list), `MemBlt`/`Mem3Blt` et `ORDERFLAGS_EX_CACHE_BITMAP_REV3_SUPPORT` avec `ORDERFLAGS_EXTRA_FLAGS`.
 - Secondaires : Cache Bitmap rév. 2 brut/RDP6 avec ou sans `bitmapComprHdr`, rév. 3 `codecID=0` brut ; `orderLength + 13`, encodages unsigned 2/4 octets, références et dimensions strictement bornées.
 - Primaires : MemBlt ROP3 sans motif ; Mem3Blt ROP3 avec brosse `BS_SOLID`. Champs omis, coordonnées delta, bornes partagées, clipping, cache indexé par partage, ROP3 appliqué dans le framebuffer. `DSTCOPY` est consommé sans trame.
