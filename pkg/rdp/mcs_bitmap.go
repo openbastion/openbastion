@@ -33,16 +33,19 @@ const (
 	rdpROP2Black            = byte(0x01)
 	rdpROP2NotMergePen      = byte(0x02)
 	rdpROP2MaskNotPen       = byte(0x03)
-	rdpROP2MergeNotPen      = byte(0x0c)
 	rdpROP2NotCopyPen       = byte(0x04)
 	rdpROP2MaskPenNot       = byte(0x05)
-	rdpROP2MaskPen          = byte(0x09)
 	rdpROP2Not              = byte(0x06)
 	rdpROP2XorPen           = byte(0x07)
+	rdpROP2NotMaskPen       = byte(0x08)
+	rdpROP2MaskPen          = byte(0x09)
 	rdpROP2NotXorPen        = byte(0x0a)
 	rdpROP2Nop              = byte(0x0b)
-	rdpROP2White            = byte(0x10)
+	rdpROP2MergeNotPen      = byte(0x0c)
 	rdpROP2CopyPen          = byte(0x0d)
+	rdpROP2MergePenNot      = byte(0x0e)
+	rdpROP2MergePen         = byte(0x0f)
+	rdpROP2White            = byte(0x10)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
@@ -225,10 +228,10 @@ func parseRDPBitmapShareDataAt(userData []byte, shareID uint32, desktopWidth, de
 	}
 }
 
-// isSupportedRDPROP2 reports the deliberately small set of fully rendered ROP2 operations.
+// isSupportedRDPROP2 reports whether operation is one of the 16 defined GDI ROP2 operations.
 func isSupportedRDPROP2(operation byte) bool {
 	switch operation {
-	case rdpROP2Black, rdpROP2NotMergePen, rdpROP2MaskNotPen, rdpROP2MergeNotPen, rdpROP2NotCopyPen, rdpROP2MaskPenNot, rdpROP2MaskPen, rdpROP2Not, rdpROP2XorPen, rdpROP2NotXorPen, rdpROP2Nop, rdpROP2CopyPen, rdpROP2White:
+	case rdpROP2Black, rdpROP2NotMergePen, rdpROP2MaskNotPen, rdpROP2NotCopyPen, rdpROP2MaskPenNot, rdpROP2Not, rdpROP2XorPen, rdpROP2NotMaskPen, rdpROP2MaskPen, rdpROP2NotXorPen, rdpROP2Nop, rdpROP2MergeNotPen, rdpROP2CopyPen, rdpROP2MergePenNot, rdpROP2MergePen, rdpROP2White:
 		return true
 	default:
 		return false
