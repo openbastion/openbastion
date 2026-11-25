@@ -1,8 +1,7 @@
-import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import type { Tab } from "../../app/AppShell";
-import { Input, Label } from "@openbastion/ui";
+import { useMemo, useState } from "react";
+import type { Tab } from "../../app/navigation";
+import { AppCommandPalette } from "@openbastion/ui";
 import { ArrowRight } from "@openbastion/icons";
-import { Button } from "./Button";
 import { useAppTranslation } from "../i18n";
 import { useCapabilities } from "../capabilities";
 import { tabAllowed } from "../../app/tabAccess";
@@ -28,8 +27,6 @@ export function CommandPalette({
   const { t, i18n } = useAppTranslation();
   const capabilities = useCapabilities();
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
 
   const commands = useMemo<Command[]>(() => {
     const destinations: { tab: Tab; label: string; detail: string; keywords: string }[] = (
@@ -62,101 +59,24 @@ export function CommandPalette({
     return navigation;
   }, [capabilities, i18n.language, onFindSession, onNavigate, query, t]);
 
-  useEffect(() => {
-    input.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    setActive(0);
-  }, [query]);
-
-  function run(command: Command | undefined) {
-    if (!command) return;
-    command.run();
-    onClose();
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActive((index) => Math.min(index + 1, commands.length - 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActive((index) => Math.max(index - 1, 0));
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      run(commands[active]);
-    } else if (event.key === "Tab") {
-      const dialog = event.currentTarget;
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled])'));
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    }
-  }
-
   return (
-    <div className="command-palette-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section
-        className="command-palette"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="command-palette-title"
-        onKeyDown={handleKeyDown}
-      >
-        <h2 id="command-palette-title" className="visually-hidden">{t("palette.title")}</h2>
-        <Label className="visually-hidden" htmlFor="command-palette-query">{t("palette.queryLabel")}</Label>
-        <Input
-          ref={input}
-          id="command-palette-query"
-          type="search"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded="true"
-          aria-controls="command-palette-results"
-          aria-activedescendant={commands[active] ? `command-${commands[active].id}` : undefined}
-          autoComplete="off"
-          spellCheck={false}
-          placeholder={t("palette.placeholder")}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <div id="command-palette-results" className="command-palette-results" role="listbox" aria-label={t("palette.results")}>
-          {commands.length ? commands.map((command, index) => (
-            <button
-              key={command.id}
-              id={`command-${command.id}`}
-              type="button"
-              role="option"
-              aria-selected={active === index}
-              className="command-option"
-              onMouseEnter={() => setActive(index)}
-              onClick={() => run(command)}
-            >
-              <span>
-                <strong>{command.label}</strong>
-                <small>{command.detail}</small>
-              </span>
-              <ArrowRight className="command-enter" size={15} />
-            </button>
-          )) : <p className="command-empty">{t("palette.empty")}</p>}
-        </div>
-        <footer className="command-palette-footer">
-          <span>{t("palette.footer.navigate")}</span>
-          <span>{t("palette.footer.select")}</span>
-          <span>{t("palette.footer.close")}</span>
-          <Button variant="ghost" className="command-close" onClick={onClose}>{t("palette.footer.closeButton")}</Button>
-        </footer>
-      </section>
-    </div>
+    <AppCommandPalette
+      commands={commands}
+      query={query}
+      onQueryChange={setQuery}
+      onClose={onClose}
+      optionIcon={<ArrowRight className="command-enter" size={15} />}
+      labels={{
+        title: t("palette.title"),
+        query: t("palette.queryLabel"),
+        placeholder: t("palette.placeholder"),
+        results: t("palette.results"),
+        empty: t("palette.empty"),
+        navigateHint: t("palette.footer.navigate"),
+        selectHint: t("palette.footer.select"),
+        closeHint: t("palette.footer.close"),
+        closeButton: t("palette.footer.closeButton"),
+      }}
+    />
   );
 }

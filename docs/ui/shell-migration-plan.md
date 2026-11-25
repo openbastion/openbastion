@@ -26,11 +26,11 @@ Aucun fichier ne contient : palette de commandes (seules les primitives `Command
 
 ## 4. Étapes proposées (une PR chacune)
 
-1. **PR A (incrément 4a)** : extraire sans changer le rendu `AppThemeProvider` et le hook de raccourcis, avec les tests existants (`app.test.tsx`, `preferences.test.tsx`) inchangés et verts.
-2. **PR B (4b)** : `AppUserMenu`, `AppMobileNavigation` (avec test de piège de focus/Échap écrit d'abord, rouge si absent), palette générique par-dessus `Command*`.
-3. **PR C (5)** : `AppLoadingState`, `AppErrorBoundary`, `AppConfirmDialog`, `AppCapabilityButton`, `AppNotificationProvider`, pages de refus génériques ; aucune capacité métier dans le package.
-4. **PR D (6)** : `app/AppShell.tsx` compose les composants du package ; suppression du code local dupliqué ; `ui-package-shell.test.tsx` complété.
-5. **PR E (7)** : `react-router` (version exacte, peer dependency de `@openbastion/ui`), `navigation.ts`, `router.tsx`.
+1. **PR A (incrément 4a) — livrée sur la branche `admin-ui-refactor`** : `useAppTheme`/`AppThemeProvider`/`useEffectiveTheme` (`packages/ui/src/theme`) et `useAppShortcuts` (`hooks/use-app-shortcuts.ts`) ; `app/AppShell.tsx` les consomme (−≈70 lignes), tests `shared/ui-package-theme-shortcuts.test.tsx` (6) ; mesuré : 42 fichiers, 346 tests verts, JS 783,86 kB / 221,83 kB gzip (+0,22 kB). Les écouteurs lisent leurs callbacks à l'événement (plus de dépendances périmées). Contre-épreuve de mutation non faite. Objectif initial : extraire sans changer le rendu `AppThemeProvider` et le hook de raccourcis, avec les tests existants (`app.test.tsx`, `preferences.test.tsx`) inchangés et verts.
+2. **PR B (4b) — livrée** : `AppMobileNavigation`, `AppUserMenu`, `AppCommandPalette`, `useAppDismissable` dans `@openbastion/ui` ; `AppShell.tsx` et `shared/ui/CommandPalette.tsx` (désormais un adaptateur : index et filtrage restent dans l'application) les consomment. Le piège de focus/Échap existait bien (effet dans `AppShell.tsx`) et est désormais testé dans le package. Piège rencontré : le focus de `main` après navigation est un `useLayoutEffect`, pour passer avant les restitutions de focus passives des composants enfants. Mesuré : 43 fichiers, 352 tests verts, JS 784,67 kB / 222,37 kB gzip. Contre-épreuve de mutation et captures navigateur non faites. Plan initial : `AppUserMenu`, `AppMobileNavigation` (avec test de piège de focus/Échap écrit d'abord, rouge si absent), palette générique par-dessus `Command*`.
+3. **PR C (5) — livrée** (voir « État PR C–E ») : `AppLoadingState`, `AppErrorBoundary`, `AppConfirmDialog`, `AppCapabilityButton`, `AppNotificationProvider`, pages de refus génériques ; aucune capacité métier dans le package.
+4. **PR D (6) — livrée** : `app/AppShell.tsx` compose les composants du package ; suppression du code local dupliqué ; `ui-package-shell.test.tsx` complété.
+5. **PR E (7) — livrée** : `react-router` (version exacte, peer dependency de `@openbastion/ui`), `navigation.ts`, `router.tsx`.
 
 ## 5. Risques
 
@@ -38,3 +38,19 @@ Aucun fichier ne contient : palette de commandes (seules les primitives `Command
 - L'ordre `useLayoutEffect` de Ctrl/Meta+K a une raison documentée (fenêtre post-connexion) : le conserver tel quel.
 - `tabOrder` indexe Alt+Maj+1…6 sur 7 destinations : la septième n'a pas de raccourci aujourd'hui ; comportement à conserver, pas à « corriger » sans décision.
 - Le CSS passe par `design-tokens` : un changement exige `restart web` dans le sandbox.
+
+## Incrément 7 (base du routage, ADR-0137) — état
+
+- `react-router` 8.5.3 (exact), en mode bibliothèque, dans `web/admin-ui` et en `peerDependencies` de `@openbastion/ui` ; `basename` dérivé de `import.meta.env.BASE_URL`.
+- `app/navigation.ts` : déclaration unique des sept destinations de premier niveau (`/overview`, `/access`, `/sessions`, `/infrastructure`, `/audit`, `/security`, `/settings`) ; barre latérale, palette, raccourcis `Alt+Maj+1..6` et gardes en dérivent. L'état `Tab` de `App.tsx` disparaît : la destination est l'URL.
+- 403 explicite (`CapabilityGate`, capacité nommée) et 404 explicite ; `/` redirige vers l'écran par défaut des préférences. Les identifiants stockés (`security` = Audit, `posture` = Sécurité) restent inversés par rapport aux URL : leur renommage demande une migration des préférences.
+- Pas encore livrés : sous-routes et `searchParams` (incréments 9 à 11), page de connexion/MFA/OIDC comme routes, `AuthGate`, `AppErrorBoundary`.
+- Tests de bout en bout : `web/admin-ui/e2e/` (`npm run e2e` contre une pile qui tourne ; `E2E_BASE_URL`, `E2E_USERNAME`, `E2E_PASSWORD`). Une seule connexion par exécution : la Gateway limite les connexions (5, puis 1 par minute).
+
+## État PR C–E (livrées sur la branche `admin-ui-refactor`)
+
+- **PR C** : `packages/ui/src/feedback/` — `AppLoadingState`, `AppErrorBoundary` (réinitialisation par `resetKeys`, n'affiche jamais le message d'erreur), `AppConfirmDialog` (Radix AlertDialog : focus initial sur Annuler, une seule requête, Échap inhibé pendant l'envoi), `AppCapabilityButton` (le nom des capacités reste dans l'application : `GatedButton` l'adapte), `AppNotificationProvider`, `AppForbiddenPage`/`AppNotFoundPage` (403 `role=alert`, 404 `role=status`). Le `ConfirmDialog` local n'est **pas** encore remplacé : ses appelants et leurs tests le sont à un incrément métier.
+- **PR D** : `app/AppShell.tsx` compose `AppShell`, `AppSidebar`, `AppSidebarBrand`, `AppNavigation`, `AppSidebarFooter`, `AppHeader`, `AppMobileNavigation`, `AppUserMenu` ; le balisage dupliqué (navigation, marque, pied) est supprimé. Le package `AppShell` accepte `mainRef` et `mobileBehavior`.
+- **Défaut corrigé** : en mobile, `.app-sidebar` avait `z-index: 2` (règle ultérieure) sous `.navigation-backdrop` (40) : le tiroir était recouvert et inclicable dans un vrai navigateur (jsdom ne le voit pas). `z-index: 41` ajouté ; `restart web` nécessaire.
+- **Aperçu Base44** : `/sessions` et `/policies` sont aussi des chemins d'API relayés par Vite ; une navigation de document (`Accept: text/html`) reçoit désormais l'application, les appels `fetch` atteignent toujours la Gateway (`vite.config.ts`, uniquement avec `BASE44_PREVIEW_MODE=1`). Sans cela, un lien profond vers `/sessions` donnait `401 missing bearer token`.
+- **Tests de bout en bout** (Playwright, `web/admin-ui/e2e/`) : `pr-c-feedback`, `pr-d-shell`, `pr-e-routing`, `appshell-shortcuts` — 26 tests verts. Lancement : `docker run --rm --network host -v "$PWD/web:/w" -w /w/admin-ui mcr.microsoft.com/playwright:v1.65.1-noble npx playwright test`. La Gateway limite les connexions (5 en rafale, puis 1 par minute) : chaque fichier se connecte une fois ; une série complète répétée sans pause échoue sur la connexion, pas sur le code.

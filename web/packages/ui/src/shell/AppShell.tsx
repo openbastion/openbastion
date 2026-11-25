@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, type Ref } from "react";
 import { cn } from "../lib/cn";
 import { AppContent } from "./AppContent";
 
@@ -15,6 +15,11 @@ export type AppShellProps = {
   // The "skip to content" link, in the application's language.
   skipLink?: ReactNode;
   mainId?: string;
+  // The focusable main landmark, for an application that moves the focus there after a navigation.
+  mainRef?: Ref<HTMLElement>;
+  // Replaces the default backdrop when the application mounts its own modal behaviour
+  // (AppMobileNavigation renders the backdrop itself, and must stay mounted while closed).
+  mobileBehavior?: ReactNode;
   className?: string;
 };
 
@@ -32,6 +37,8 @@ export function AppShell({
   onMobileClose,
   skipLink,
   mainId = "main-content",
+  mainRef,
+  mobileBehavior,
   className,
 }: AppShellProps) {
   return (
@@ -45,7 +52,7 @@ export function AppShell({
           className,
         )}
       >
-        {mobileOpen ? (
+        {mobileBehavior ?? (mobileOpen ? (
           <button
             type="button"
             className="navigation-backdrop"
@@ -53,9 +60,9 @@ export function AppShell({
             tabIndex={-1}
             onClick={onMobileClose}
           />
-        ) : null}
+        ) : null)}
         {sidebar}
-        <AppContent header={header} banner={banner} id={mainId} inert={mobileOpen}>
+        <AppContent ref={mainRef} header={header} banner={banner} id={mainId} inert={mobileOpen}>
           {children}
         </AppContent>
         {footer}

@@ -78,6 +78,8 @@ export default {
       enableLight: "Switch to the light theme",
     },
     skipToContent: "Skip to main content",
+    forbidden: { title: "Access denied", detail: "The \"{{capability}}\" capability is required to show this page. The server remains the authority: ask an administrator to grant it." },
+    notFound: { title: "Page not found", detail: "This address does not match any Admin UI screen." },
     search: { open: "Open search and commands", label: "Search", placeholder: "Search resources…" },
     preferences: { open: "Open preferences", label: "Preferences" },
     breadcrumb: { aria: "Breadcrumb", workspace: "Workspace" },
