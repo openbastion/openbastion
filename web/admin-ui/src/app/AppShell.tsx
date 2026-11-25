@@ -1,4 +1,5 @@
-import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { useAppShortcuts, useAppTheme } from "@openbastion/ui";
 import {
   ApiDocumentation,
   Check,
@@ -65,11 +66,6 @@ const tabOrder: Tab[] = [
   "settings",
 ];
 
-function isTextEntry(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || target.closest("input, textarea, select, [contenteditable=true]") !== null;
-}
-
 // Navigation contains only capabilities backed by an implemented Admin UI screen and public API.
 export function AppShell({
   who,
@@ -98,7 +94,7 @@ export function AppShell({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
+  const theme = useAppTheme({ theme: preferences.theme, density: preferences.density });
   const menuButton = useRef<HTMLButtonElement>(null);
   const paletteButton = useRef<HTMLButtonElement>(null);
   const userMenuButton = useRef<HTMLButtonElement>(null);
@@ -138,51 +134,15 @@ export function AppShell({
     setMobileOpen(false);
   }
 
-  function effectiveTheme(): "light" | "dark" {
-    if (preferences.theme !== "system") return preferences.theme;
-    return systemDark ? "dark" : "light";
-  }
-
-  useEffect(() => {
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!media) return;
-    const update = () => setSystemDark(media.matches);
-    update();
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = preferences.theme === "system"
-      ? systemDark ? "dark" : "light"
-      : preferences.theme;
-    return () => { delete document.documentElement.dataset.theme; };
-  }, [preferences.theme, systemDark]);
-
-  useEffect(() => {
-    document.documentElement.dataset.density = preferences.density;
-    return () => { delete document.documentElement.dataset.density; };
-  }, [preferences.density]);
-
-  // Global shortcuts must be active as soon as the authenticated shell is committed.
-  // A passive effect leaves a brief post-login window where Ctrl/Meta+K can be missed.
-  useLayoutEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setPaletteOpen(true);
-        return;
-      }
-      if (isTextEntry(event.target) || paletteOpen || preferencesOpen) return;
-      if (event.altKey && event.shiftKey && /^[1-6]$/.test(event.key)) {
-        event.preventDefault();
-        const next = tabOrder[Number(event.key) - 1];
-        if (tabAllowed(capabilities, next)) chooseTab(next);
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onTab, paletteOpen, preferencesOpen]);
+  useAppShortcuts({
+    onCommandPalette: () => setPaletteOpen(true),
+    onDestination: (index) => {
+      const next = tabOrder[index];
+      if (next && tabAllowed(capabilities, next)) chooseTab(next);
+    },
+    destinationCount: 6,
+    suspended: paletteOpen || preferencesOpen,
+  });
 
   useEffect(() => {
     mainRef.current?.focus();
@@ -462,9 +422,9 @@ export function AppShell({
                 </div>
                 <div className="user-menu-section">
                   <span>{t("shell.theme.label")}</span>
-                  <button type="button" className="user-menu-item" aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}>
-                    {effectiveTheme() === "light" ? <Moon size={17} /> : <Sun size={17} />}
-                    {effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
+                  <button type="button" className="user-menu-item" aria-label={theme === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: theme === "light" ? "dark" : "light" })}>
+                    {theme === "light" ? <Moon size={17} /> : <Sun size={17} />}
+                    {theme === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
                   </button>
                 </div>
                 <button type="button" className="user-menu-item" onClick={() => { setPreferencesOpen(true); setUserMenuOpen(false); }}>

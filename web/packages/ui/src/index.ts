@@ -70,3 +70,6 @@ export {
   type AppNavigationSection,
   type AppBreadcrumbItem,
 } from "./shell";
+
+export { AppThemeProvider, useAppTheme, useEffectiveTheme, type AppEffectiveTheme, type AppThemePreference, type AppThemeProviderProps, type AppThemeSettings } from "./theme";
+export { useAppShortcuts, isTextEntry, type AppShortcutsOptions } from "./hooks/use-app-shortcuts";
