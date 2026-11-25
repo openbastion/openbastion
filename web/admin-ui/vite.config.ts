@@ -33,7 +33,16 @@ export default defineConfig({
         host: "0.0.0.0",
         port: 3000,
         allowedHosts: previewHosts,
-        proxy: Object.fromEntries(apiPaths.map((p) => [p, { target: gateway, ws: p === "/sessions" }])),
+        proxy: Object.fromEntries(apiPaths.map((p) => [p, {
+          target: gateway,
+          ws: p === "/sessions",
+          // ADR-0137: a screen is addressable at the root here (/sessions is also an API path). A
+          // browser navigation (document request) gets the app; fetch/XHR calls still reach the Gateway.
+          bypass: (req: { headers: Record<string, string | string[] | undefined> }) =>
+            req.headers["sec-fetch-dest"] === "document" || (req.headers.accept ?? "").toString().startsWith("text/html")
+              ? "/index.html"
+              : undefined,
+        }])),
       }
     : undefined,
   build: {

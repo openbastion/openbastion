@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { InlineNotice } from "../shared/ui/InlineNotice";
+import { AppForbiddenPage, AppNotFoundPage } from "@openbastion/ui";
 import { useAppTranslation } from "../shared/i18n";
 import { useCapabilities } from "../shared/capabilities";
 import { tabAllowed, tabNeeds, type Tab } from "./navigation";
@@ -12,19 +12,14 @@ export function CapabilityGate({ tab, children }: { tab: Tab; children: ReactNod
   const capabilities = useCapabilities();
   if (tabAllowed(capabilities, tab)) return <>{children}</>;
   return (
-    <InlineNotice tone="danger">
-      <strong>{t("shell.forbidden.title")}</strong>
-      <p>{t("shell.forbidden.detail", { capability: tabNeeds(tab).join(", ") })}</p>
-    </InlineNotice>
+    <AppForbiddenPage
+      title={t("shell.forbidden.title")}
+      detail={t("shell.forbidden.detail", { capability: tabNeeds(tab).join(", ") })}
+    />
   );
 }
 
 export function NotFound() {
   const { t } = useAppTranslation();
-  return (
-    <InlineNotice tone="warning">
-      <strong>{t("shell.notFound.title")}</strong>
-      <p>{t("shell.notFound.detail")}</p>
-    </InlineNotice>
-  );
+  return <AppNotFoundPage title={t("shell.notFound.title")} detail={t("shell.notFound.detail")} />;
 }

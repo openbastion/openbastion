@@ -1,5 +1,19 @@
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AppMobileNavigation, AppUserMenu, useAppDismissable, useAppShortcuts, useAppTheme } from "@openbastion/ui";
+import {
+  AppHeader,
+  AppMobileNavigation,
+  AppNavigation,
+  AppShell as UiAppShell,
+  AppSidebar,
+  AppSidebarBrand,
+  AppSidebarFooter,
+  AppUserMenu,
+  useAppDismissable,
+  useAppShortcuts,
+  useAppTheme,
+  type AppNavigationItemDescriptor,
+  type AppNavigationSection,
+} from "@openbastion/ui";
 import {
   ApiDocumentation,
   Check,
@@ -156,40 +170,24 @@ export function AppShell({
     },
   });
 
-  function renderNavItem(key: Tab) {
-    const Icon = destinationOf(key).icon;
-    const favorite = preferences.favorites.includes(key);
-    const label = t(`shell.nav.${key}.label`);
-    return (
-      <div className="nav-entry" key={key}>
-        <button
-          type="button"
-          className="nav-item"
-          aria-label={label}
-          aria-current={tab === key ? "page" : undefined}
-          title={collapsed ? `${label} — ${t(`shell.nav.${key}.description`)}` : undefined}
-          onClick={() => chooseTab(key)}
-        >
-          <Icon size={18} />
-          <span className="nav-item-label">{label}</span>
-        </button>
-        <button
-          type="button"
-          className="nav-favorite-toggle"
-          aria-label={t(favorite ? "shell.removeFavorite" : "shell.addFavorite", { label })}
-          aria-pressed={favorite}
-          title={t(favorite ? "shell.favoriteTitle.remove" : "shell.favoriteTitle.add")}
-          onClick={() => toggleFavorite(key)}
-        >
-          {favorite ? <StarFilled size={15} /> : <Star size={15} />}
-        </button>
-      </div>
-    );
+  function navItem(key: Tab): AppNavigationItemDescriptor {
+    return {
+      id: key,
+      label: t(`shell.nav.${key}.label`),
+      description: t(`shell.nav.${key}.description`),
+      icon: destinationOf(key).icon,
+      active: tab === key,
+      favorite: preferences.favorites.includes(key),
+    };
   }
+  const sections: AppNavigationSection[] = groups.map((group) => ({
+    id: group,
+    label: t(`shell.groups.${group}`),
+    items: shownTabs.filter((key) => destinationOf(key).group === group).map(navItem),
+  }));
 
   return (
     <>
-      <a className="skip-link" href="#main-content" inert={mobileOpen}>{t("shell.skipToContent")}</a>
       {paletteOpen ? (
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -208,40 +206,44 @@ export function AppShell({
           }}
         />
       ) : null}
-      <div className={"app-workspace" + (collapsed ? " sidebar-collapsed" : "") + (mobileOpen ? " mobile-navigation-open" : "")}>
-        <AppMobileNavigation
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          containerRef={sidebarRef}
-          returnFocusRef={menuButton}
-          excludeSelector=".sidebar-collapse-toggle"
-        />
-        <aside
-          ref={sidebarRef}
-          id="admin-navigation"
-          className="app-sidebar"
-          aria-label={t("shell.navigation.main")}
-          role={mobileOpen ? "dialog" : undefined}
-          aria-modal={mobileOpen ? "true" : undefined}
-        >
-          <div className="sidebar-brand">
-            <BrandMark />
-            <span className="sidebar-brand-copy">
-              <strong>OpenBastion</strong>
-              <small>{t("shell.sidebar.brandTag")}</small>
-            </span>
-            <button
-              type="button"
-              className="sidebar-collapse-toggle"
-              aria-label={collapsed ? t("shell.sidebar.expand") : t("shell.sidebar.collapse")}
-              aria-controls="admin-navigation"
-              aria-expanded={!collapsed}
-              onClick={() => updatePreferences({ ...preferences, sidebarCollapsed: !collapsed })}
-            >
-              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            </button>
-          </div>
-          <div className="sidebar-workspace-selector">
+      <UiAppShell
+        collapsed={collapsed}
+        mobileOpen={mobileOpen}
+        mainRef={mainRef}
+        skipLink={<a className="skip-link" href="#main-content" inert={mobileOpen}>{t("shell.skipToContent")}</a>}
+        mobileBehavior={(
+          <AppMobileNavigation
+            open={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+            containerRef={sidebarRef}
+            returnFocusRef={menuButton}
+            excludeSelector=".sidebar-collapse-toggle"
+          />
+        )}
+        banner={capabilities.status === "unavailable" ? <InlineNotice tone="warning">{t("capabilities.unavailableBanner")}</InlineNotice> : null}
+        footer={<LegalNotice />}
+        sidebar={(
+          <AppSidebar
+            ref={sidebarRef}
+            label={t("shell.navigation.main")}
+            collapsed={collapsed}
+            mobileOpen={mobileOpen}
+            brand={(
+              <AppSidebarBrand
+                name="OpenBastion"
+                tagline={t("shell.sidebar.brandTag")}
+                mark={<BrandMark />}
+                collapsed={collapsed}
+                expandLabel={t("shell.sidebar.expand")}
+                collapseLabel={t("shell.sidebar.collapse")}
+                controlsId="admin-navigation"
+                expandIcon={<ChevronRight size={16} />}
+                collapseIcon={<ChevronLeft size={16} />}
+                onToggleCollapse={() => updatePreferences({ ...preferences, sidebarCollapsed: !collapsed })}
+              />
+            )}
+            context={(
+              <div className="sidebar-workspace-selector">
             <span className="sidebar-workspace-label">{t("shell.sidebar.workspace")}</span>
             <button
               type="button"
@@ -265,37 +267,10 @@ export function AppShell({
               </div>
             ) : null}
           </div>
-          <nav aria-label={t("shell.navigation.sections")}>
-            {favoriteTabs.length > 0 ? (
-              <div className="nav-group">
-                <h2 className="nav-group-title">{t("shell.favorites")}</h2>
-                {favoriteTabs.map(renderNavItem)}
-              </div>
-            ) : null}
-            {groups.map((group) => (
-              <div className="nav-group" key={group}>
-                <h2 className="nav-group-title">{t(`shell.groups.${group}`)}</h2>
-                {shownTabs.filter((key) => destinationOf(key).group === group).map(renderNavItem)}
-              </div>
-            ))}
-            <div className="nav-group nav-resources">
-              <h2 className="nav-group-title">{t("shell.sidebar.resources")}</h2>
-              <a className="sidebar-resource-link" href="https://github.com/openbastion/openbastion/tree/main/docs" target="_blank" rel="noreferrer">
-                <ApiDocumentation size={16} />{t("shell.sidebar.documentation")}
-              </a>
-              <a className="sidebar-resource-link" href="https://github.com/openbastion/openbastion/tree/main/docs/user-guide" target="_blank" rel="noreferrer">
-                <HelpCircle size={16} />{t("shell.sidebar.helpCentre")}
-              </a>
-            </div>
-          </nav>
-          <div className="sidebar-footer">
-            <div className="sidebar-footer-heading">
-              <span className="sidebar-status-dot" aria-hidden="true" />
-              <strong>{t("shell.sidebar.console")}</strong>
-            </div>
-            <p>{t("shell.sidebar.statusDetail")}</p>
-          </div>
-          <AppUserMenu
+            )}
+            footer={<AppSidebarFooter title={t("shell.sidebar.console")} detail={t("shell.sidebar.statusDetail")} />}
+            userMenu={(
+              <AppUserMenu
             open={userMenuOpen}
             onOpenChange={setUserMenuOpen}
             triggerRef={userMenuButton}
@@ -334,27 +309,55 @@ export function AppShell({
               {t("shell.signOut")}
             </button>
           </AppUserMenu>
-        </aside>
-        <div className="app-content">
-          <header className="app-header" inert={mobileOpen}>
-            <div className="topbar-breadcrumb" aria-label={t("shell.breadcrumb.aria")}>
-              <span>{t("shell.breadcrumb.workspace")}</span>
-              <span aria-hidden="true">/</span>
-              <strong>{t(`shell.nav.${tab}.label`)}</strong>
-            </div>
-            <button
-              ref={paletteButton}
-              type="button"
-              className="command-trigger"
-              aria-label={t("shell.search.open")}
-              onClick={() => setPaletteOpen(true)}
-            >
-              <Search size={16} />
-              <span>{t("shell.search.placeholder")}</span>
-              <kbd>Ctrl K</kbd>
-            </button>
-            <div className="header-actions">
-              <span className="environment-badge"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}</span>
+            )}
+          >
+            <AppNavigation
+              label={t("shell.navigation.sections")}
+              sections={sections}
+              favorites={{ label: t("shell.favorites"), items: favoriteTabs.map(navItem) }}
+              resources={{
+                label: t("shell.sidebar.resources"),
+                items: [
+                  { id: "documentation", label: t("shell.sidebar.documentation"), href: "https://github.com/openbastion/openbastion/tree/main/docs", icon: ApiDocumentation, external: true },
+                  { id: "help-centre", label: t("shell.sidebar.helpCentre"), href: "https://github.com/openbastion/openbastion/tree/main/docs/user-guide", icon: HelpCircle, external: true },
+                ],
+              }}
+              collapsed={collapsed}
+              onSelect={(id) => chooseTab(id as Tab)}
+              onToggleFavorite={(id) => toggleFavorite(id as Tab)}
+              favoriteActionLabel={(item) => t(item.favorite ? "shell.removeFavorite" : "shell.addFavorite", { label: item.label })}
+              favoriteTitle={(item) => t(item.favorite ? "shell.favoriteTitle.remove" : "shell.favoriteTitle.add")}
+              favoriteIcon={<Star size={15} />}
+              favoriteIconActive={<StarFilled size={15} />}
+            />
+          </AppSidebar>
+        )}
+        header={(
+          <AppHeader
+            inert={mobileOpen}
+            breadcrumbs={(
+              <div className="topbar-breadcrumb" aria-label={t("shell.breadcrumb.aria")}>
+                <span>{t("shell.breadcrumb.workspace")}</span>
+                <span aria-hidden="true">/</span>
+                <strong>{t(`shell.nav.${tab}.label`)}</strong>
+              </div>
+            )}
+            search={(
+              <button
+                ref={paletteButton}
+                type="button"
+                className="command-trigger"
+                aria-label={t("shell.search.open")}
+                onClick={() => setPaletteOpen(true)}
+              >
+                <Search size={16} />
+                <span>{t("shell.search.placeholder")}</span>
+                <kbd>Ctrl K</kbd>
+              </button>
+            )}
+            actions={(
+              <>
+                <span className="environment-badge"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}</span>
               <div className="notifications-menu" ref={notificationsRef}>
                 <button
                   ref={notificationsButton}
@@ -396,15 +399,13 @@ export function AppShell({
               >
                 <Menu size={18} />
               </button>
-            </div>
-          </header>
-          <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>
-            {capabilities.status === "unavailable" ? <InlineNotice tone="warning">{t("capabilities.unavailableBanner")}</InlineNotice> : null}
-            {children}
-          </main>
-        </div>
-        <LegalNotice />
-      </div>
+              </>
+            )}
+          />
+        )}
+      >
+        {children}
+      </UiAppShell>
     </>
   );
 }

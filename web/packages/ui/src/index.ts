@@ -75,3 +75,4 @@ export { AppThemeProvider, useAppTheme, useEffectiveTheme, type AppEffectiveThem
 export { useAppShortcuts, isTextEntry, type AppShortcutsOptions } from "./hooks/use-app-shortcuts";
 export { AppMobileNavigation, AppUserMenu, AppCommandPalette, type AppMobileNavigationProps, type AppUserMenuProps, type AppCommand, type AppCommandPaletteProps } from "./shell";
 export { useAppDismissable, type AppDismissableOptions } from "./hooks/use-app-dismissable";
+export * from "./feedback";

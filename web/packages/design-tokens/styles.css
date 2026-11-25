@@ -4669,6 +4669,7 @@ main.login {
   .app-workspace.sidebar-collapsed { display: block; min-height: 100vh; }
   .app-sidebar {
     position: fixed;
+    z-index: 41; /* above .navigation-backdrop (40): the later base rule set z-index 2 and hid the drawer behind it */
     top: 4rem;
     right: auto;
     bottom: 0;
