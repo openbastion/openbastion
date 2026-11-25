@@ -180,7 +180,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedPolyline(t *testing.T) {
 	valid := mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 2, []byte{0x00, 1, 1, 1, 1})
 	cases := map[string][]byte{
 		"wrong field mask":      func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
-		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[3+4] = 0x08; return out }(),
+		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[3+4] = 0x00; return out }(),
 		"nonzero brush cache":   func() []byte { out := append([]byte(nil), valid...); out[4+5] = 1; return out }(),
 		"zero entries":          mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 0, nil),
 		"too many entries":      mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{1, 2, 3}, 35, mcsTestDeltaPoints(35, 1, 0)),
@@ -245,7 +245,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedLineTo(t *testing.T) {
 		"wrong field mask":         func() []byte { out := append([]byte(nil), valid...); out[2] = 0xfe; return out }(),
 		"opaque background mode":   func() []byte { out := append([]byte(nil), valid...); out[4] = 2; return out }(),
 		"nonzero background color": func() []byte { out := append([]byte(nil), valid...); out[4+10] = 1; return out }(),
-		"unsupported ROP2":         func() []byte { out := append([]byte(nil), valid...); out[4+13] = 0x08; return out }(),
+		"unsupported ROP2":         func() []byte { out := append([]byte(nil), valid...); out[4+13] = 0x00; return out }(),
 		"dashed pen":               func() []byte { out := append([]byte(nil), valid...); out[4+14] = 1; return out }(),
 		"wide pen":                 func() []byte { out := append([]byte(nil), valid...); out[4+15] = 2; return out }(),
 		"negative start":           mcsTestLineToOrder(0x09, true, -1, 1, 5, 3, 1, 2, 3),
@@ -2092,7 +2092,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedPolygonSC(t *testing.T) {
 	valid := mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{1, 2, 3}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
 	cases := map[string][]byte{
 		"wrong field mask":      func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
-		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[7] = 0x08; return out }(),
+		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[7] = 0x00; return out }(),
 		"unsupported fill mode": func() []byte { out := append([]byte(nil), valid...); out[8] = 0x02; return out }(),
 		"zero entries":          mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{1, 2, 3}, 0, nil),
 		"one delta entry":       mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{1, 2, 3}, 1, []byte{0x00, 1, 0}),
@@ -2331,7 +2331,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedEllipseSC(t *testing.T) {
 	valid := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3})
 	cases := map[string][]byte{
 		"wrong field mask":           func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
-		"unsupported ROP2":           func() []byte { out := append([]byte(nil), valid...); out[11] = 0x08; return out }(),
+		"unsupported ROP2":           func() []byte { out := append([]byte(nil), valid...); out[11] = 0x00; return out }(),
 		"unsupported fill mode":      func() []byte { out := append([]byte(nil), valid...); out[12] = 0x02; return out }(),
 		"negative left":              mcsTestEllipseSCOrder(0x09, true, -1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
 		"reversed horizontal bounds": mcsTestEllipseSCOrder(0x09, true, 5, 1, 1, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
