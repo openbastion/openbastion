@@ -21,7 +21,7 @@ func CallerRules() []mtls.Rule {
 		{Method: http.MethodPost, Path: "/authz/v1/policies", Callers: []string{mtls.APIGateway}},
 		// Every service that enforces RBAC on its own routes asks here.
 		{Method: http.MethodPost, Path: "/authz/v1/check-access",
-			Callers: []string{mtls.APIGateway, mtls.SessionBroker, mtls.PasswordVault, mtls.CommandRecorder, mtls.VideoRecorder}},
+			Callers: []string{mtls.APIGateway, mtls.SessionBroker, mtls.WorkflowService, mtls.PasswordVault, mtls.CommandRecorder, mtls.VideoRecorder}},
 		// ADR-0131: the Admin UI's capabilities, asked by the Gateway for the caller it verified.
 		{Method: http.MethodPost, Path: "/authz/v1/capabilities", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodGet, Path: "/metrics", Callers: []string{mtls.Any}}, // ADR-0135: pool telemetry

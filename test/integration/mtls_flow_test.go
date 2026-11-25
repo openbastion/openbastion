@@ -2,7 +2,7 @@
 // call between services mutually authenticated, and what each kind of attacker
 // gets on that network.
 //
-// Eight services run under INTERNAL_TLS=required, each with a certificate
+// Nine services run under INTERNAL_TLS=required, each with a certificate
 // minted for the test (helpers: mtls_helpers_test.go). The journey is the one
 // the other flows prove over plain HTTP — a user logs in, asks for a session,
 // connects over SSH, runs commands, an auditor reads the recording — and here
@@ -33,7 +33,7 @@ import (
 	"github.com/openbastion/openbastion/pkg/mtls/pki"
 )
 
-func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProcesses(t *testing.T) {
+func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossNineRealProcesses(t *testing.T) {
 	root := repoRoot(t)
 	p := newTestPKI(t)
 
@@ -41,6 +41,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-mtls")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-mtls")
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-mtls")
+	workflowBin := buildBinary(t, root, "./services/access/workflow-service/cmd/workflow-service", "workflow-service-mtls")
 	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-mtls")
 	sshProxyBin := buildBinary(t, root, "./services/proxy/ssh-proxy/cmd/ssh-proxy", "ssh-proxy-mtls")
 	recorderBin := buildBinary(t, root, "./services/recording-audit/command-recorder/cmd/command-recorder", "command-recorder-mtls")
@@ -53,6 +54,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		brokerURL   = "https://127.0.0.1:18804"
 		proxyURL    = "https://127.0.0.1:18805"
 		authnURL    = "https://127.0.0.1:18807"
+		workflowURL = "https://127.0.0.1:18811"
 		recorderURL = "https://127.0.0.1:18809"
 		gatewayURL  = "http://127.0.0.1:18808" // the public listener: users, bearer tokens, TLS ends at the edge
 	)
@@ -62,6 +64,8 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	startMTLSService(t, root, authzBin, "18803", p, mtls.Authorization)
 	// Logins are written to the real Audit Service, under the authentication certificate (ADR-0064).
 	startMTLSService(t, root, authnBin, "18807", p, mtls.Authentication, "SKIP_DEMO_SEED=1", "AUDIT_URL="+auditURL)
+	startMTLSService(t, root, workflowBin, "18811", p, mtls.WorkflowService,
+		"AUTHENTICATION_URL="+authnURL, "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
 	startMTLSService(t, root, recorderBin, "18809", p, mtls.CommandRecorder, "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
 	startMTLSService(t, root, sshProxyBin, "18805", p, mtls.SSHProxy,
 		"SSH_PORT=18806",
@@ -70,7 +74,8 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		// No PROXY_SERVICE_ID: under mutual TLS the proxy's identity is its certificate's.
 	)
 	startMTLSService(t, root, brokerBin, "18804", p, mtls.SessionBroker,
-		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "SSH_PROXY_URL="+proxyURL)
+		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL,
+		"SSH_PROXY_URL="+proxyURL, "WORKFLOW_SERVICE_URL="+workflowURL)
 	// This scenario exercises many independent routes from one loopback client. Keep the
 	// production per-address limiter enabled, but give this integration harness a bounded
 	// budget large enough that unrelated route coverage cannot mask the authorization
@@ -78,6 +83,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	startService(t, root, gatewayBin, "18808", p.env(mtls.APIGateway,
 		"AUTHENTICATION_URL="+authnURL, "SESSION_BROKER_URL="+brokerURL, "VAULT_URL="+vaultURL,
 		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+recorderURL, "AUDIT_URL="+auditURL,
+		"WORKFLOW_SERVICE_URL="+workflowURL,
 		"CLIENT_REQUEST_BURST=1000", "CLIENT_REQUEST_RATE_PER_MINUTE=6000")...)
 
 	const targetSecret = "mtls-it-target-secret"
@@ -88,6 +94,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	mtlsCreateUser(t, admin, authnURL, "root-admin", "root-pw-123456", []string{"platform-admin", "vault-admin"})
 	mtlsCreateUser(t, admin, authnURL, "operator", "op-password-123", []string{"dba"})
 	mtlsCreateUser(t, admin, authnURL, "auditor", "aud-password-123", []string{"session-auditor"})
+	// The pending-list read now resolves the caller against Authentication via Workflow.
 
 	// -- from here on, only the Gateway's public API ---------------------------
 	adminToken, status := gatewayLogin(t, gatewayURL, "root-admin", "root-pw-123456")
@@ -780,7 +787,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			{"operator tooling verifies the audit chain", mtls.AdminCLI, auditURL + "/audit/v1/verify-chain"},
 			{"the Gateway lists accounts, on behalf of a vault admin", mtls.APIGateway, vaultURL + "/vault/v1/accounts?actorRoles=vault-admin"},
 			{"any service answers health checks", mtls.SSHProxy, vaultURL + "/healthz"},
-			{"the Gateway lists the waiting requests, on behalf of a user", mtls.APIGateway, brokerURL + "/sessions?status=pending_approval&callerId=u-x&actorRoles=sre"},
+			{"the Gateway lists the waiting requests, on behalf of a user", mtls.APIGateway, brokerURL + "/sessions?status=pending_approval&callerId=" + operatorID + "&actorRoles=dba"},
 			{"the Gateway reads a session, on behalf of its requester", mtls.APIGateway, brokerURL + "/sessions/" + sess.ID + "?callerId=" + operatorID},
 		} {
 			if status, raw := mustCall(t, p.clientAs(t, ok.caller), http.MethodGet, ok.url, nil); status != http.StatusOK {

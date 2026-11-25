@@ -14,6 +14,7 @@ func CallerRules() []mtls.Rule {
 		// whether a bearer token is valid.
 		{Method: http.MethodPost, Path: "/auth/v1/login", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/verify", Callers: []string{mtls.APIGateway}},
+		{Method: http.MethodGet, Path: "/auth/v1/internal/users/{user_id}/authorization-context", Template: true, Callers: []string{mtls.WorkflowService}},
 		// Federated login (ADR-0035): the Gateway forwards both ends of it.
 		{Method: http.MethodGet, Path: "/auth/v1/oidc", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/oidc/start", Callers: []string{mtls.APIGateway}},

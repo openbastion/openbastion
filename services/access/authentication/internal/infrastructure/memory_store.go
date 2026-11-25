@@ -8,7 +8,7 @@ import (
 	"github.com/openbastion/openbastion/services/access/authentication/internal/domain"
 )
 
-var ErrUserNotFound = errors.New("user not found")
+var ErrUserNotFound = domain.ErrUserNotFound
 var ErrUsernameTaken = errors.New("username already exists")
 
 type InMemoryStore struct {
@@ -126,5 +126,9 @@ func (s *InMemoryStore) TakeAttempt(ctx context.Context, state string) (domain.L
 func copyUser(u *domain.User) *domain.User {
 	cp := *u
 	cp.Roles = append([]string(nil), u.Roles...)
+	if u.DisabledAt != nil {
+		disabledAt := *u.DisabledAt
+		cp.DisabledAt = &disabledAt
+	}
 	return &cp
 }

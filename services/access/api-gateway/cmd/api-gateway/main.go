@@ -58,6 +58,7 @@ func runService() {
 	sessionBrokerURL := mustEnv("SESSION_BROKER_URL", rt.DefaultURL("127.0.0.1:8084"))
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	authorizationURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
+	workflowServiceURL := mustEnv("WORKFLOW_SERVICE_URL", rt.DefaultURL("127.0.0.1:8091"))
 	commandRecorderURL := mustEnv("COMMAND_RECORDER_URL", rt.DefaultURL("127.0.0.1:8087"))
 	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
 	videoRecorderGRPCURL := mustEnv("VIDEO_RECORDER_GRPC_URL", rt.DefaultURL("127.0.0.1:8089"))
@@ -74,6 +75,7 @@ func runService() {
 		mtls.Peer{URL: sessionBrokerURL, Service: mtls.SessionBroker},
 		mtls.Peer{URL: vaultURL, Service: mtls.PasswordVault},
 		mtls.Peer{URL: authorizationURL, Service: mtls.Authorization},
+		mtls.Peer{URL: workflowServiceURL, Service: mtls.WorkflowService},
 		mtls.Peer{URL: commandRecorderURL, Service: mtls.CommandRecorder},
 		mtls.Peer{URL: auditURL, Service: mtls.AuditService},
 	)
@@ -135,7 +137,8 @@ func runService() {
 		WithVaultAccountActionLimiter(application.NewVaultAccountActionLimiter(vaultActionBurst, vaultActionRate)).
 		WithProxyTrust(trust).
 		WithVideoRecorderClient(videoRecorderClient).
-		WithAuditServiceURL(auditURL)
+		WithAuditServiceURL(auditURL).
+		WithWorkflowServiceURL(workflowServiceURL)
 
 	// The Admin UI (ADR-0036), same origin as the API: served only when given.
 	if dir := os.Getenv("ADMIN_UI_DIR"); dir != "" {
@@ -154,6 +157,7 @@ func runService() {
 	log.Printf("  -> session-broker:  %s", sessionBrokerURL)
 	log.Printf("  -> vault:           %s", vaultURL)
 	log.Printf("  -> authorization:   %s", authorizationURL)
+	log.Printf("  -> workflow-service: %s", workflowServiceURL)
 	log.Printf("  -> command-recorder: %s", commandRecorderURL)
 	log.Printf("  -> audit-service:    %s", auditURL)
 	log.Printf("  -> video-recorder (gRPC): %s", videoRecorderGRPCURL)

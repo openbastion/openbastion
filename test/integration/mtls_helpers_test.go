@@ -214,6 +214,7 @@ func startMTLSService(t *testing.T, root, bin, port string, p *testPKI, service 
 
 	baseURL := "https://127.0.0.1:" + port
 	probe := p.clientAs(t, mtls.AdminCLI)
+	probe.Timeout = time.Second
 	deadline := time.Now().Add(10 * time.Second)
 	var last error
 	for time.Now().Before(deadline) {

@@ -111,8 +111,9 @@ func TestPostgresFlow_ReplicasStartingTogetherOnAFreshDatabase_AllStart(t *testi
 		// Every migration the Broker has: 001_init.sql, 002_session_expiry.sql (ADR-0034),
 		// 003_after_use_owed.sql (ADR-0044), 004_approval.sql (ADR-0067),
 		// 005_search_window.sql (ADR-0080), 006_clipboard_rights.sql (ADR-0096), then
-		// 007_metadata_attestation.sql (ADR-0116), a no-op here: the columns are already there.
-		if !strings.Contains(broker.out.String(), "schema migrations [1 2 3 4 5 6 7] applied") {
+		// 007_metadata_attestation.sql (ADR-0116), a no-op here: the columns are already there,
+		// then 008_session_workflow_outbox.sql (ADR-0138).
+		if !strings.Contains(broker.out.String(), "schema migrations [1 2 3 4 5 6 7 8] applied") {
 			t.Fatalf("the upgrade is not said:\n%s", broker.out.String())
 		}
 		stopService(t, broker)

@@ -511,8 +511,8 @@ func TestPostgresStore_AfterUseOwed(t *testing.T) {
 	}
 }
 
-// ADR-0067: a session on an account that requires approval keeps that mark and its ticket,
-// through a decision, in Get and in the list of the requests waiting.
+// ADR-0067 / ADR-0138: ordinary approvals are listed by Workflow, never by the
+// break-glass-only Session Broker query. Their session marker and ticket still round-trip.
 func TestPostgresStore_ApprovalAndTicketRoundTrip(t *testing.T) {
 	db := testDB(t)
 	store := infrastructure.NewPostgresStore(db, testMetadataKey)
@@ -527,18 +527,18 @@ func TestPostgresStore_ApprovalAndTicketRoundTrip(t *testing.T) {
 	if saved, err := store.SaveIfUnderPendingLimit(ctx, sess, 3, now); err != nil || !saved {
 		t.Fatalf("SaveIfUnderPendingLimit: %v %v", saved, err)
 	}
+	got, err := store.Get(ctx, sess.ID)
+	if err != nil || !got.ApprovalRequired || got.Ticket != "CHG0001234" {
+		t.Fatalf("ordinary approval session round trip: %+v err=%v", got, err)
+	}
 	pending, _, err := store.ListPending(ctx, now, 1000)
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
 	for _, p := range pending {
 		if p.ID == sess.ID {
-			found = p.ApprovalRequired && p.Ticket == "CHG0001234"
+			t.Fatal("ordinary approval leaked into the break-glass-only queue")
 		}
-	}
-	if !found {
-		t.Fatal("the list of requests waiting lost the mark or the ticket")
 	}
 	decided := *sess
 	decided.Status = domain.StatusActive
@@ -547,7 +547,7 @@ func TestPostgresStore_ApprovalAndTicketRoundTrip(t *testing.T) {
 	if ok, err := store.SaveIfStatus(ctx, &decided, domain.StatusPendingApproval); err != nil || !ok {
 		t.Fatalf("SaveIfStatus: %v %v", ok, err)
 	}
-	got, err := store.Get(ctx, sess.ID)
+	got, err = store.Get(ctx, sess.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -596,5 +596,109 @@ func TestPostgresStore_ClipboardRightsRoundTrip(t *testing.T) {
 		if len(found) != 1 || found[0].ClipboardToTarget != want.ToTarget || found[0].ClipboardFromTarget != want.FromTarget {
 			t.Fatalf("searched %d session(s); rights there must be %+v: %+v", len(found), want, found)
 		}
+	}
+}
+
+func TestPostgresWorkflowOutboxIsAtomicLeasedAndTokenFenced(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	makeSession := func(id string) *domain.Session {
+		return &domain.Session{ID: id, Status: domain.StatusPendingApproval, Protocol: "ssh", RequestedBy: uniqueID("workflow_outbox_requester"), PrivilegedAccountID: "acct_workflow", Justification: "maintenance", CreatedAt: now, ExpiresAt: now.Add(15 * time.Minute), DurationMinutes: 30, ApprovalRequired: true, Ticket: "CHG-OUTBOX"}
+	}
+	first := makeSession(uniqueID("session_workflow"))
+	saved, err := store.SavePendingWithWorkflowOutbox(ctx, first, 1, now)
+	if err != nil || !saved {
+		t.Fatalf("SavePendingWithWorkflowOutbox saved=%v err=%v", saved, err)
+	}
+	pending, err := store.HasPendingWorkflowDispatches(ctx)
+	if err != nil || !pending {
+		t.Fatalf("outbox should be pending: %v %v", pending, err)
+	}
+
+	second := makeSession(uniqueID("session_workflow"))
+	second.RequestedBy = first.RequestedBy
+	saved, err = store.SavePendingWithWorkflowOutbox(ctx, second, 1, now)
+	if err != nil || saved {
+		t.Fatalf("shared pending quota saved=%v err=%v", saved, err)
+	}
+	if _, err := store.Get(ctx, second.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("quota-refused session was persisted: %v", err)
+	}
+
+	claimed, err := store.ClaimWorkflowDispatches(ctx, now, 30*time.Second, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim count=%d err=%v", len(claimed), err)
+	}
+	claim := claimed[0]
+	if claim.SessionID != first.ID || claim.Attempts != 1 || claim.LeaseToken == "" || claim.LeaseUntil == nil {
+		t.Fatalf("invalid lease: %+v", claim)
+	}
+	if err := store.CompleteWorkflowDispatch(ctx, first.ID, "wrong-token"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("wrong token completed dispatch: %v", err)
+	}
+	if err := store.RetryWorkflowDispatch(ctx, first.ID, "wrong-token", "temporary", now.Add(time.Minute)); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("wrong token retried dispatch: %v", err)
+	}
+	if err := store.RetryWorkflowDispatch(ctx, first.ID, claim.LeaseToken, "temporary", now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if due, err := store.ClaimWorkflowDispatches(ctx, now.Add(30*time.Second), 30*time.Second, 10); err != nil || len(due) != 0 {
+		t.Fatalf("early claim=%d err=%v", len(due), err)
+	}
+	reclaimed, err := store.ClaimWorkflowDispatches(ctx, now.Add(2*time.Minute), 30*time.Second, 10)
+	if err != nil || len(reclaimed) != 1 || reclaimed[0].Attempts != 2 || reclaimed[0].LeaseToken == claim.LeaseToken {
+		t.Fatalf("reclaim=%+v err=%v", reclaimed, err)
+	}
+	if err := store.CompleteWorkflowDispatch(ctx, first.ID, reclaimed[0].LeaseToken); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err := store.HasPendingWorkflowDispatches(ctx); err != nil || pending {
+		t.Fatalf("completed outbox remains: %v %v", pending, err)
+	}
+
+	// Two Broker replicas racing to claim the same due row must never both own it.
+	concurrent := makeSession(uniqueID("session_workflow_race"))
+	concurrent.RequestedBy = uniqueID("user_workflow_race")
+	saved, err = store.SavePendingWithWorkflowOutbox(ctx, concurrent, 1, now.Add(3*time.Minute))
+	if err != nil || !saved {
+		t.Fatalf("concurrent fixture saved=%v err=%v", saved, err)
+	}
+	secondReplica := infrastructure.NewPostgresStore(db, testMetadataKey)
+	start := make(chan struct{})
+	results := make(chan []domain.WorkflowDispatch, 2)
+	errorsOut := make(chan error, 2)
+	var workers sync.WaitGroup
+	for _, replica := range []*infrastructure.PostgresStore{store, secondReplica} {
+		workers.Add(1)
+		go func(replica *infrastructure.PostgresStore) {
+			defer workers.Done()
+			<-start
+			claimed, claimErr := replica.ClaimWorkflowDispatches(ctx, now.Add(3*time.Minute), 30*time.Second, 10)
+			results <- claimed
+			errorsOut <- claimErr
+		}(replica)
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	close(errorsOut)
+	claimCount, owners := 0, 0
+	for claimErr := range errorsOut {
+		if claimErr != nil {
+			t.Fatal(claimErr)
+		}
+	}
+	for batch := range results {
+		for _, item := range batch {
+			if item.SessionID == concurrent.ID {
+				claimCount++
+				owners++
+			}
+		}
+	}
+	if claimCount != 1 || owners != 1 {
+		t.Fatalf("concurrent claim owners=%d, want exactly one", owners)
 	}
 }

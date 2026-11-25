@@ -447,7 +447,13 @@ func configureMFA(svc *application.AuthenticationService, repo interface {
 
 // main dispatches the common version command before entering the service lifecycle.
 func main() {
-	if err := command.NewServiceCommand("authentication", runService).Execute(); err != nil {
+	root := command.NewServiceCommand("authentication", runService)
+	// The healthcheck of the distroless image (deploy/docker-compose): probe the running service
+	// under its own identity, so dependent services can wait for readiness.
+	root.AddCommand(command.NewProbeCommand(func(ctx context.Context, port int, path string) error {
+		return mtls.ProbeSelf(ctx, mtls.Authentication, port, path)
+	}))
+	if err := root.Execute(); err != nil {
 		log.Fatalf("authentication: %v", err)
 	}
 }

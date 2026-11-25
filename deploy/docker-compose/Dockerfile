@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       ./services/access/authentication/cmd/authentication \
       ./services/access/authorization/cmd/authorization \
       ./services/access/session-broker/cmd/session-broker \
+      ./services/access/workflow-service/cmd/workflow-service \
       ./services/proxy/ssh-proxy/cmd/ssh-proxy \
       ./services/proxy/rdp-vnc-proxy/cmd/rdp-vnc-proxy \
       ./services/vault/password-vault/cmd/password-vault \

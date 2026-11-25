@@ -1,0 +1,169 @@
+syntax = "proto3";
+package openbastion.workflow.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/workflow/v1;workflowv1";
+
+// ApprovalWorkflow décrit le contrat de données du Workflow Service.
+// Conformément à ADR-0050, les RPC ci-dessous sont transportés en HTTP/JSON
+// sous mTLS (pas en gRPC), sauf décision ADR ultérieure.
+service ApprovalWorkflow {
+  // API Gateway uniquement.
+  rpc ListHierarchy(ListHierarchyRequest) returns (ListHierarchyResponse);
+  rpc GetManager(GetManagerRequest) returns (ManagerRelation);
+  rpc ListDirectReports(ListDirectReportsRequest) returns (ListDirectReportsResponse);
+  rpc SetManager(SetManagerRequest) returns (ManagerRelation);
+  rpc DeleteManager(DeleteManagerRequest) returns (HierarchyRevision);
+
+  // Session Broker uniquement.
+  rpc CreateApprovalRequest(CreateApprovalRequestRequest) returns (ApprovalRequest);
+  rpc GetApprovalRequest(GetApprovalRequestRequest) returns (ApprovalRequest);
+  rpc ListPendingApprovals(ListPendingApprovalsRequest) returns (ListPendingApprovalsResponse);
+  rpc ApproveRequest(DecideApprovalRequest) returns (ApprovalRequest);
+  rpc RejectRequest(DecideApprovalRequest) returns (ApprovalRequest);
+  rpc CancelRequest(CancelApprovalRequest) returns (ApprovalRequest);
+}
+
+enum ApprovalRequestStatus {
+  APPROVAL_REQUEST_STATUS_UNSPECIFIED = 0;
+  APPROVAL_REQUEST_STATUS_PENDING = 1;
+  APPROVAL_REQUEST_STATUS_APPROVED = 2;
+  APPROVAL_REQUEST_STATUS_REJECTED = 3;
+  APPROVAL_REQUEST_STATUS_EXPIRED = 4;
+  APPROVAL_REQUEST_STATUS_CANCELLED = 5;
+}
+
+message HierarchyRevision {
+  int64 revision = 1;
+}
+
+message ListHierarchyRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string manager_user_id = 2; // vide : toutes les relations, permission globale requise
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message HierarchyRelation {
+  string user_id = 1;
+  string manager_user_id = 2;
+  int64 revision = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message ListHierarchyResponse {
+  repeated HierarchyRelation items = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+  int32 total_items = 4;
+  int64 revision = 5;
+}
+
+message GetManagerRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string user_id = 2;
+}
+
+message ManagerRelation {
+  string user_id = 1;
+  string manager_user_id = 2; // vide si aucune relation
+  int64 revision = 3;         // révision globale de hiérarchie
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message ListDirectReportsRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string manager_user_id = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message DirectReport {
+  string user_id = 1;
+  google.protobuf.Timestamp updated_at = 2;
+}
+
+message ListDirectReportsResponse {
+  repeated DirectReport items = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+  int32 total_items = 4;
+  int64 revision = 5;
+}
+
+message SetManagerRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string user_id = 2;
+  string manager_user_id = 3;
+  int64 expected_revision = 4;
+}
+
+message DeleteManagerRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string user_id = 2;
+  int64 expected_revision = 3;
+}
+
+message CreateApprovalRequestRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string request_id = 2;          // stable, equal to session id
+  string resource_type = 3;       // initialement "session" uniquement
+  string resource_id = 4;
+  string requester_user_id = 5;   // recopié depuis la session Broker durable, jamais du client
+  string account_id = 6;
+  string ticket_reference = 7;    // référence non secrète
+  google.protobuf.Timestamp decision_expires_at = 8;
+  string idempotency_key = 9;     // stable across retries
+}
+
+message GetApprovalRequestRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string request_id = 2;
+}
+
+message ListPendingApprovalsRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListPendingApprovalsResponse {
+  repeated ApprovalRequest items = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+  int32 total_items = 4;
+}
+
+message DecideApprovalRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string request_id = 2;
+  int64 expected_revision = 3;
+  string reason = 4;
+}
+
+message CancelApprovalRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string request_id = 2;
+  int64 expected_revision = 3;
+  string reason_code = 4;
+}
+
+message ApprovalRequest {
+  string request_id = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+  string requester_user_id = 4;
+  string account_id = 5;
+  string ticket_reference = 6;
+  string approver_user_id = 7; // instantané N+1 ; jamais fourni par le client
+  int64 hierarchy_revision = 8;
+  ApprovalRequestStatus status = 9;
+  google.protobuf.Timestamp decision_expires_at = 10;
+  google.protobuf.Timestamp created_at = 11;
+  string decided_by = 12;
+  google.protobuf.Timestamp decided_at = 13;
+  string decision_reason = 14;
+  int64 revision = 15;
+}

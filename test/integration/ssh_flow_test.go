@@ -100,10 +100,11 @@ func startService(t *testing.T, root, binPath, port string, extraEnv ...string) 
 
 	baseURL := "http://127.0.0.1:" + port
 	deadline := time.Now().Add(5 * time.Second)
+	healthClient := &http.Client{Timeout: time.Second}
 	ready := false
 	var lastErr error
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(baseURL + "/healthz")
+		resp, err := healthClient.Get(baseURL + "/healthz")
 		if err != nil {
 			lastErr = err
 			time.Sleep(50 * time.Millisecond)

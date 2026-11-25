@@ -17,10 +17,11 @@ const Any = "*"
 // Rule says which services may call a route. A request that matches no rule is
 // refused: a new route is unreachable until someone decides who may call it.
 type Rule struct {
-	Method  string   // "" matches every method
-	Path    string   // exact, or a prefix when Prefix is set
-	Prefix  bool     // Path is a subtree, like a ServeMux pattern ending in "/"
-	Callers []string // service names, or Any
+	Method   string   // "" matches every method
+	Path     string   // exact, a prefix when Prefix is set, or a segment template when Template is set
+	Prefix   bool     // Path is a subtree, like a ServeMux pattern ending in "/"
+	Template bool     // Path contains named single-segment placeholders, e.g. {user_id}
+	Callers  []string // service names, or Any
 }
 
 func (r Rule) matches(method, p string) bool {
@@ -30,7 +31,56 @@ func (r Rule) matches(method, p string) bool {
 	if r.Prefix {
 		return strings.HasPrefix(p, r.Path)
 	}
+	if r.Template {
+		return matchesPathTemplate(r.Path, p)
+	}
 	return p == r.Path
+}
+
+func validPathTemplate(pattern string) bool {
+	if strings.Contains(pattern, "//") || strings.ContainsAny(pattern, "?#") || path.Clean(pattern) != pattern {
+		return false
+	}
+	placeholders := 0
+	for _, part := range strings.Split(pattern, "/") {
+		if !strings.ContainsAny(part, "{}") {
+			continue
+		}
+		if len(part) < 3 || part[0] != '{' || part[len(part)-1] != '}' || strings.ContainsAny(part[1:len(part)-1], "{}") {
+			return false
+		}
+		name := part[1 : len(part)-1]
+		if name == "" || !((name[0] >= 'a' && name[0] <= 'z') || name[0] == '_') {
+			return false
+		}
+		for i := 1; i < len(name); i++ {
+			c := name[i]
+			if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+				return false
+			}
+		}
+		placeholders++
+	}
+	return placeholders > 0
+}
+
+func matchesPathTemplate(pattern, actual string) bool {
+	patternParts, actualParts := strings.Split(pattern, "/"), strings.Split(actual, "/")
+	if len(patternParts) != len(actualParts) {
+		return false
+	}
+	for i, part := range patternParts {
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			if len(part) < 3 || actualParts[i] == "" {
+				return false
+			}
+			continue
+		}
+		if part != actualParts[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (r Rule) admits(service string) bool {
@@ -68,8 +118,14 @@ func Guard(trustDomain string, rules []Rule, next http.Handler) http.Handler {
 		if !strings.HasPrefix(r.Path, "/") || len(r.Callers) == 0 {
 			panic("mtls: rule " + r.Path + " needs an absolute path and at least one caller")
 		}
+		if r.Prefix && r.Template {
+			panic("mtls: rule " + r.Path + " cannot be both prefix and template")
+		}
 		if r.Prefix && !strings.HasSuffix(r.Path, "/") {
 			panic("mtls: prefix rule " + r.Path + " must end with a slash")
+		}
+		if r.Template && !validPathTemplate(r.Path) {
+			panic("mtls: malformed path template " + r.Path)
 		}
 		for _, c := range r.Callers {
 			if c != Any && !ValidServiceName(c) {

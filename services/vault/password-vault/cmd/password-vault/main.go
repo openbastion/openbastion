@@ -280,7 +280,13 @@ func rewrapEvery(svc *application.VaultService, every time.Duration, previous []
 
 // main dispatches version before entering the Vault lifecycle.
 func main() {
-	if err := command.NewServiceCommand("password-vault", runService).Execute(); err != nil {
+	root := command.NewServiceCommand("password-vault", runService)
+	// The healthcheck of the distroless image (deploy/docker-compose): probe the running service
+	// under its own identity, so dependent services can wait for readiness.
+	root.AddCommand(command.NewProbeCommand(func(ctx context.Context, port int, path string) error {
+		return mtls.ProbeSelf(ctx, mtls.PasswordVault, port, path)
+	}))
+	if err := root.Execute(); err != nil {
 		log.Fatalf("password-vault: %v", err)
 	}
 }

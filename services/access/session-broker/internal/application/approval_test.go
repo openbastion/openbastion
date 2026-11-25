@@ -27,12 +27,18 @@ func newGatedFixture(t *testing.T, allow ...string) (*approvalFixture, *recordin
 	f := newApprovalFixture(30, allow...)
 	notifier := &recordingNotifier{}
 	f.broker = application.NewSessionBrokerService(f.store, f.authz, f.vault, f.audit, &fakeAccountLookup{approvalRequired: true}, f.proxy).
-		WithBreakGlass(30).WithClock(f.clock.Now).WithApprovalNotifier(notifier)
+		WithBreakGlass(30).WithClock(f.clock.Now).WithApprovalNotifier(notifier).WithWorkflowApprovalClient(f.workflow)
 	return f, notifier
 }
 
 func (f *approvalFixture) ask(ticket string) (*domain.Session, error) {
-	return f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "patch the database", ticket, 45)
+	sess, err := f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "patch the database", ticket, 45)
+	if err == nil && sess.Status == domain.StatusPendingApproval {
+		if dispatchErr := f.broker.DispatchWorkflowOutbox(context.Background()); dispatchErr != nil {
+			return nil, dispatchErr
+		}
+	}
+	return sess, err
 }
 
 func (f *approvalFixture) asked(t *testing.T) *domain.Session {
@@ -69,7 +75,7 @@ func TestApprovalRequired_ARequestWaits_WithItsTicket(t *testing.T) {
 	f.untouched(t)
 
 	if notifier.count() != 1 || notifier.got[0].Event != domain.NotifyApprovalRequested || notifier.got[0].Ticket != goodTicket {
-		t.Fatalf("the approvers are told, with the ticket: %+v", notifier.got)
+		t.Fatalf("the approvers are notified only after Workflow resolves the request: %+v", notifier.got)
 	}
 }
 
@@ -232,17 +238,13 @@ func TestApprovalRequired_NobodyApprovesTheirOwnRequest(t *testing.T) {
 func TestApprovalRequired_TheApproverNeedsTheAccountsApprovalPolicy(t *testing.T) {
 	// The break-glass approvers' policy is not this one, nor is the session policy.
 	f, _ := newGatedFixture(t, sessionRes, approveRes)
+	f.workflow.allow = false // Workflow refuses the N+1 because it lacks session-approve for this account.
 	sess := f.asked(t)
-	for _, decide := range []func(string, string) (*domain.Session, error){f.approve, f.reject} {
-		if _, err := decide(sess.ID, approver); !errors.Is(err, domain.ErrForbidden) {
-			t.Fatalf("a break-glass approver decided an approval request: %v", err)
-		}
+	if f.stored(t, sess.ID).Status != domain.StatusDenied {
+		t.Fatal("a request without an authorized N+1 was not denied closed")
 	}
-	if f.stored(t, sess.ID).Status != domain.StatusPendingApproval {
-		t.Fatal("a refused decision changed the request")
-	}
-	if f.audit.count("session.approval_approved") != 1 || f.audit.count("session.approval_rejected") != 1 {
-		t.Fatalf("both refusals are audited: %v", f.audit.events)
+	if f.audit.count("session.approval_request_failed") != 1 {
+		t.Fatalf("Workflow refusal must be audited by the Broker: %v", f.audit.events)
 	}
 
 	// And the reverse: session-approve does not decide a break-glass request.
@@ -305,8 +307,7 @@ func TestApprovalRequired_ListedToWhoeverMayDecide_EvenWithBreakGlassOff(t *test
 		t.Fatalf("the requester is not shown their own request to decide: %v", ids(mine))
 	}
 
-	f.authz.allow[sessionApproveRes] = false
-	f.authz.allow[approveRes] = true // a break-glass approver
+	f.workflow.allow = false // Workflow rechecks the current N+1 authorization policy
 	if items, _, _, _ := f.broker.ListPendingApprovals(context.Background(), approver, []string{"lead"}, 1, 20); len(items) != 0 {
 		t.Fatalf("shown to somebody who cannot decide it: %v", ids(items))
 	}

@@ -1,5 +1,5 @@
 // The per-user budget of POST /sessions at the Gateway (ADR-0014), on real processes:
-// Authorization, Authentication, Audit, the Session Broker and three API Gateways with
+// Authorization, Authentication, Audit, Workflow, the Session Broker and three API Gateways with
 // different settings.
 //
 // The claims that matter: a user who has no right at all cannot make the Broker write more
@@ -43,6 +43,7 @@ func TestSessionRate_AUserWithNoRightCannotMakeTheBrokerWriteMoreThanItsBudget_A
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-14")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-14")
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-14")
+	workflowBin := buildBinary(t, root, "./services/access/workflow-service/cmd/workflow-service", "workflow-service-14")
 	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-14")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-14")
 
@@ -50,9 +51,10 @@ func TestSessionRate_AUserWithNoRightCannotMakeTheBrokerWriteMoreThanItsBudget_A
 	startService(t, root, authzBin, "18762")
 	authn := startService(t, root, authnBin, "18764", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
+	workflow := startService(t, root, workflowBin, "18768", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL=http://127.0.0.1:18762", "AUDIT_URL="+spy.baseURL)
 	broker := startService(t, root, brokerBin, "18763",
 		"AUTHORIZATION_URL=http://127.0.0.1:18762", "VAULT_URL=http://127.0.0.1:18760", "AUDIT_URL="+spy.baseURL,
-		"SSH_PROXY_URL=http://127.0.0.1:18769")
+		"SSH_PROXY_URL=http://127.0.0.1:18769", "WORKFLOW_SERVICE_URL="+workflow.baseURL)
 	gatewayEnv := func(extra ...string) []string {
 		return append([]string{"AUTHENTICATION_URL=http://127.0.0.1:18764", "SESSION_BROKER_URL=" + broker.baseURL,
 			"COMMAND_RECORDER_URL=http://127.0.0.1:18769"}, extra...)

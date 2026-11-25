@@ -28,6 +28,7 @@ const (
 	Authentication  = "authentication"
 	Authorization   = "authorization"
 	SessionBroker   = "session-broker"
+	WorkflowService = "workflow-service"
 	SSHProxy        = "ssh-proxy"
 	PasswordVault   = "password-vault"
 	AuditService    = "audit-service"

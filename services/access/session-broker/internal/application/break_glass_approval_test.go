@@ -48,13 +48,14 @@ func (c *fakeClock) advance(d time.Duration) {
 }
 
 type approvalFixture struct {
-	broker *application.SessionBrokerService
-	authz  *resourceAuthz
-	audit  *journalAudit
-	vault  *fakeVaultAuthorizer
-	proxy  *fakeProxyClient
-	store  *infrastructure.InMemoryStore
-	clock  *fakeClock
+	broker   *application.SessionBrokerService
+	authz    *resourceAuthz
+	audit    *journalAudit
+	vault    *fakeVaultAuthorizer
+	proxy    *fakeProxyClient
+	store    *infrastructure.InMemoryStore
+	clock    *fakeClock
+	workflow *fakeWorkflowClient
 }
 
 // newApprovalFixture builds a Broker that has never been told anything about approval:
@@ -63,13 +64,15 @@ func newApprovalFixture(maxMinutes int, allow ...string) *approvalFixture {
 	f := &approvalFixture{
 		authz: &resourceAuthz{allow: map[string]bool{}}, audit: &journalAudit{}, vault: &fakeVaultAuthorizer{},
 		proxy: &fakeProxyClient{}, store: infrastructure.NewInMemoryStore(),
-		clock: &fakeClock{t: time.Date(2026, 10, 21, 3, 0, 0, 0, time.UTC)},
+		clock:    &fakeClock{t: time.Date(2026, 10, 21, 3, 0, 0, 0, time.UTC)},
+		workflow: newFakeWorkflowClient(),
 	}
+	f.workflow.now = f.clock.Now
 	for _, r := range allow {
 		f.authz.allow[r] = true
 	}
 	f.broker = application.NewSessionBrokerService(f.store, f.authz, f.vault, f.audit, &fakeAccountLookup{}, f.proxy).
-		WithBreakGlass(maxMinutes).WithClock(f.clock.Now)
+		WithBreakGlass(maxMinutes).WithClock(f.clock.Now).WithWorkflowApprovalClient(f.workflow)
 	return f
 }
 

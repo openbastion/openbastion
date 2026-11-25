@@ -29,8 +29,8 @@ export class Api {
   }
 
   // credentials stays "omit" for everything but the one call that needs a cookie (connectScreen).
-  async request<T>(method: string, path: string, body?: unknown, credentials: RequestCredentials = "omit"): Promise<T> {
-    const headers: Record<string, string> = {};
+  async request<T>(method: string, path: string, body?: unknown, credentials: RequestCredentials = "omit", extraHeaders: Record<string, string> = {}): Promise<T> {
+    const headers: Record<string, string> = { ...extraHeaders };
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const resp = await this.fetchFn(path, {

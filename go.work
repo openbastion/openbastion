@@ -24,6 +24,7 @@ use (
 	./services/access/authentication
 	./services/access/authorization
 	./services/access/session-broker
+	./services/access/workflow-service
 	./services/proxy/rdp-vnc-proxy
 	./services/proxy/ssh-proxy
 	./services/recording-audit/audit-service

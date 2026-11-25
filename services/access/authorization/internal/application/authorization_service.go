@@ -117,7 +117,7 @@ func (s *AuthorizationService) BootstrapAdminPolicy(ctx context.Context, role, c
 // Decision mirrors CheckAccessResponse (docs/api/grpc/README.md §8).
 type Decision struct {
 	Allowed          bool
-	RequiresApproval bool // always false in MVP — no Workflow Service yet (docs/roadmap.md §2)
+	RequiresApproval bool // reserved; ADR-0138 N+1 assignment is resolved by Workflow Service, not this flag
 	Reason           string
 }
 

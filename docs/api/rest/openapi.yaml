@@ -2,15 +2,15 @@ openapi: 3.1.0
 info:
   title: OpenBastion REST API
   version: "0.1.0-mvp"
-  summary: API publique OpenBastion — périmètre MVP
+  summary: API publique OpenBastion — MVP et contrats planifiés
   license:
     name: AGPL-3.0
     identifier: AGPL-3.0-only
   description: >
-    API REST de la plateforme PAM OpenBastion. Ce document ne couvre que le
-    périmètre MVP (voir docs/roadmap.md). Les endpoints liés aux
-    protocoles hors SSH, au Workflow Service et au MFA Service natif seront
-    ajoutés en v0.0.1 sans rupture de compatibilité sur ce préfixe /v1.
+    API REST de la plateforme PAM OpenBastion. Ce document décrit les routes
+    livrées et les contrats planifiés ; le statut de disponibilité est précisé
+    dans la description de chaque opération. Les ajouts restent compatibles
+    sous le préfixe /v1 ; voir docs/roadmap.md.
 
 servers:
   - url: "https://{host}/api/v1"
@@ -24,6 +24,7 @@ security:
 tags:
   - name: auth
   - name: sessions
+  - name: approval-hierarchy
   - name: vault
   - name: policies
   - name: audit
@@ -455,36 +456,192 @@ paths:
         "405": { description: Méthode autre que GET }
         "503": { description: "Le service Authorization n'a pas répondu comme attendu : l'Admin UI grise alors toutes les actions" }
 
+  /approval-hierarchy:
+    get:
+      tags: [approval-hierarchy]
+      summary: Liste les relations hiérarchiques (lecture globale)
+      description: >
+        Route publique implémentée selon ADR-0138. Exige
+        `approval-hierarchy:read` sur `approval-hierarchy:all`. Sans cette
+        permission, utiliser les lectures ciblées du supérieur ou des rapports.
+        `managerUserId` filtre les relations d'un supérieur direct et exige
+        `approval-hierarchy:read` sur `approval-hierarchy:reports:{managerUserId}` ;
+        sans filtre, la page porte sur toutes les relations et exige la permission
+        sur `approval-hierarchy:all`. Les identifiants sont opaques et aucune
+        donnée de profil, de rôle ou d'annuaire n'est exposée.
+      parameters:
+        - name: managerUserId
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Page de relations hiérarchiques
+          headers:
+            ETag:
+              schema: { type: string, example: '"hierarchy-43"' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalHierarchyList" }
+        "401": { description: Non authentifié. }
+        "403": { description: Permission de lecture globale absente. }
+        "503": { description: Workflow Service indisponible. }
+
+  /approval-hierarchy/users/{userId}/manager:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [approval-hierarchy]
+      summary: Lit le supérieur hiérarchique direct d'un utilisateur
+      description: >
+        Route publique implémentée selon ADR-0138. Exige
+        `approval-hierarchy:read` sur `approval-hierarchy:user:{userId}` ou
+        `approval-hierarchy:all`. La réponse n'expose aucune donnée d'annuaire.
+        L'ETag porte la révision globale de la hiérarchie.
+      responses:
+        "200":
+          description: Relation présente ou absente (`manager` vaut null si absente)
+          headers:
+            ETag:
+              schema: { type: string, example: '"hierarchy-42"' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalHierarchyManagerView" }
+        "401": { description: Non authentifié. }
+        "403": { description: Permission de lecture absente. }
+        "404": { description: Utilisateur inconnu ou inactif, sans divulgation hors permission. }
+        "503": { description: Authentication, Authorization ou Workflow Service indisponible. }
+    put:
+      tags: [approval-hierarchy]
+      summary: Crée ou remplace le supérieur direct d'un utilisateur
+      description: >
+        Route publique implémentée selon ADR-0138. Exige
+        `approval-hierarchy:manage` sur `approval-hierarchy:user:{userId}` ou
+        `approval-hierarchy:all`. `If-Match` est obligatoire et doit contenir
+        l'ETag de la révision globale courante. Les deux utilisateurs doivent
+        être actifs ; auto-référence et cycle sont refusés. Le principal est
+        tiré du JWT vérifié, jamais du corps.
+      parameters:
+        - $ref: "#/components/parameters/HierarchyIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetApprovalManagerRequest" }
+      responses:
+        "200":
+          description: Relation enregistrée
+          headers:
+            ETag:
+              schema: { type: string, example: '"hierarchy-43"' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalHierarchyManager" }
+        "400": { description: Corps invalide ou If-Match absent/mal formé. }
+        "401": { description: Non authentifié. }
+        "403": { description: Permission de gestion absente. }
+        "404": { description: Utilisateur inexistant ou inactif. }
+        "409": { description: Révision périmée, auto-référence ou cycle détecté. }
+        "503": { description: Authentication, Authorization, Audit ou Workflow Service indisponible ; aucune mutation. }
+    delete:
+      tags: [approval-hierarchy]
+      summary: Supprime le supérieur direct d'un utilisateur
+      description: >
+        Route publique implémentée selon ADR-0138. Exige
+        `approval-hierarchy:manage` et l'ETag courant dans `If-Match`.
+        L'opération est auditée avant mutation ; les demandes en attente
+        conservent leur instantané d'approbateur.
+      parameters:
+        - $ref: "#/components/parameters/HierarchyIfMatch"
+      responses:
+        "200":
+          description: Relation supprimée ; la nouvelle révision globale est retournée.
+          headers:
+            ETag:
+              description: Nouvelle révision globale de la hiérarchie.
+              schema: { type: string, example: '\"hierarchy-44\"' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalHierarchyDelete" }
+        "400": { description: If-Match absent ou mal formé. }
+        "401": { description: Non authentifié. }
+        "403": { description: Permission de gestion absente. }
+        "404": { description: Relation absente ou utilisateur inconnu. }
+        "409": { description: Révision périmée. }
+        "503": { description: Authentication, Authorization, Audit ou Workflow Service indisponible ; aucune mutation. }
+
+  /approval-hierarchy/users/{managerUserId}/reports:
+    parameters:
+      - name: managerUserId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+    get:
+      tags: [approval-hierarchy]
+      summary: Liste les subordonnés directs d'un approbateur
+      description: >
+        Route publique implémentée selon ADR-0138. Exige
+        `approval-hierarchy:read` sur
+        `approval-hierarchy:reports:{managerUserId}` ou `approval-hierarchy:all`.
+        La pagination est bornée à 100 ; aucune donnée d'annuaire ou de rôle
+        n'est retournée.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Page de subordonnés directs
+          headers:
+            ETag:
+              schema: { type: string, example: '"hierarchy-43"' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalHierarchyReports" }
+        "401": { description: Non authentifié. }
+        "403": { description: Permission de lecture absente. }
+        "404": { description: Manager inconnu ou inactif. }
+        "503": { description: Authentication, Authorization ou Workflow Service indisponible. }
+
   /sessions:
     get:
       tags: [sessions]
-      summary: Liste les demandes break-glass en attente que l'appelant peut décider (ADR-0012)
+      summary: Liste les demandes en attente que l'appelant peut décider (ADR-0012, ADR-0138)
       description: >
         **Un seul statut est servi : `status=pending_approval`.** Sans `status`,
-        ou avec un autre statut : `400` (servir « les siennes » et « toutes pour
-        un administrateur » exige un modèle de visibilité que le RBAC actuel ne
-        sait pas exprimer ; ce n'est pas encore fait).
+        ou avec un autre statut : `400`.
 
-        La liste est celle de **ce que l'appelant pourrait approuver maintenant**
-        — pas de ce qui existe : demandes en attente et non périmées, dont il
-        n'est pas l'auteur, pour un compte que couvre sa politique
-        `breakglass-approve:account:{id}`, tant que le break-glass est activé et
-        que la durée demandée tient dans la limite d'aujourd'hui. Qui n'a
-        aucune autorité reçoit une liste **vide** en `200`, jamais `403` : la
-        réponse ne dit pas s'il existe des demandes. Les plus proches de leur
-        échéance viennent en premier.
+        La liste est celle de **ce que l'appelant peut décider maintenant** —
+        jamais une liste de toutes les demandes existantes. Pour une demande
+        ordinaire (compte `approvalRequired`), l'appelant doit être l'approbateur
+        N+1 figé à la création par Workflow Service, distinct du demandeur, et
+        détenir `session-approve:account:{id}`. Pour une demande break-glass,
+        les règles dédiées restent celles d'ADR-0011/0012 : politique
+        `breakglass-approve:account:{id}`, dérogation active et durée dans la
+        limite configurée. Une relation hiérarchique ne confère jamais à elle
+        seule un droit d'approbation.
+
+        Qui n'a aucune autorité reçoit une liste **vide** en `200`, jamais `403` :
+        la réponse ne révèle pas si d'autres demandes existent. Les plus proches
+        de leur échéance viennent en premier. Le Workflow Service résout les
+        approbateurs à la création ; une modification ultérieure de hiérarchie
+        ne réaffecte pas les demandes en attente.
 
         Le Broker lit au plus 100 demandes en attente ; s'il y en avait
         davantage, la réponse porte `truncated: true`. La pagination porte sur
-        la liste déjà filtrée.
+        la liste déjà filtrée. Il fusionne les demandes ordinaires affectées
+        par Workflow avec les demandes break-glass conservées dans son magasin.
+        Si une outbox de dispatch reste en attente, ou si une erreur Workflow,
+        Authorization ou Audit empêche de constituer la page complète, la
+        réponse est 503 et aucune page partielle n'est servie.
 
         L'identité de l'appelant et ses rôles viennent du jeton vérifié par le
         Gateway ; rien de ce que le client écrit à ce sujet n'est relayé.
 
         **Chaque demande de la page servie est un événement d'audit**
         `session.listed` (succès, ressource `session`, l'identifiant de la
-        demande, auteur = l'utilisateur authentifié), écrit **avant** que la
-        page soit servie ; si l'un d'eux ne s'écrit pas, la page n'est pas
+        demande, auteur = l'utilisateur authentifié), écrit par le Broker
+        **avant** que la page soit servie ; si l'un d'eux ne s'écrit pas, la page n'est pas
         servie (503) — ADR-0023. Pas de budget : chaque liste servie écrit à
         nouveau. Une page vide n'écrit rien et ne dépend pas de l'audit.
       parameters:
@@ -539,12 +696,20 @@ paths:
       description: >
         Par défaut, l'octroi d'une session ordinaire est immédiat après
         vérification RBAC. Si le compte exige une approbation (ADR-0067), le
-        demandeur fournit `ticket` : la demande attend une autre personne,
-        titulaire d'une politique sur `session-approve:account:{id}`. Le ticket
+        demandeur fournit `ticket` : la demande attend son supérieur direct
+        N+1, résolu et figé par Workflow Service (ADR-0138). Ce supérieur doit
+        également détenir une politique sur `session-approve:account:{id}` ;
+        aucun supérieur valide ou autorisé signifie un refus fermé avant toute
+        ouverture de session. La session est d'abord persistée en attente avec
+        une outbox durable ; tant que Workflow n'a pas confirmé l'affectation,
+        elle n'est ni visible dans la file d'approbation ni connectable. Un refus
+        permanent de résolution la fait passer à `denied` (sans fallback). Le ticket
         suit `APPROVAL_TICKET_PATTERN` et reste une référence, jamais un secret.
         Il figure dans les événements d'audit de demande et de décision,
         protégés par le hash v4 (ADR-0068). Une demande `breakGlass` garde ses
-        propres règles d'approbation (ADR-0011).
+        propres règles d'approbation (ADR-0011), y compris si le compte porte
+        aussi `approvalRequired` : le droit `breakglass-approve` reste distinct
+        et la hiérarchie N+1 n'est pas utilisée pour le break-glass.
 
         Avec `breakGlass: true`, la session peut s'exécuter alors que le
         Command Recorder est indisponible (ADR-0009) — une dérogation à
@@ -616,7 +781,9 @@ paths:
           description: >
             Session créée (`active`) — ou demande enregistrée au statut
             `pending_approval` si le compte ou la politique break-glass demande
-            une approbation.
+            une approbation. Pour une approbation ordinaire, le dispatch vers
+            Workflow est durable et asynchrone ; aucune connexion ni décision
+            n'est possible tant que l'approbateur n'a pas été résolu.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Session" }
@@ -642,7 +809,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "409":
-          description: Le compte privilégié n'a pas de clé d'hôte épinglée (ADR-0039) — aucune session ne pourrait s'y ouvrir ; la demande est refusée et auditée (ADR-0043).
+          description: >
+            Le compte privilégié n'a pas de clé d'hôte épinglée (ADR-0039) ;
+            aucune session ne pourrait s'y ouvrir. La demande est refusée et
+            auditée (ADR-0043).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -654,9 +824,11 @@ paths:
             réponse porte `Retry-After` (secondes, arrondies au-dessus, au
             moins 1) ; la demande n'a pas atteint le Broker et n'est ni
             enregistrée ni auditée ; réessayer après le délai.
-            (2) **Plafond** : demande `breakGlass` refusée parce que son
-            demandeur a déjà le nombre maximal de demandes en attente d'une
-            décision (`BREAKGLASS_MAX_PENDING_PER_REQUESTER`, ADR-0013). Le
+            (2) **Plafond** : demande soumise à approbation (compte
+            `approvalRequired` ou `breakGlass`) refusée parce que son demandeur
+            a déjà le nombre maximal de demandes en attente d'une décision
+            (`BREAKGLASS_MAX_PENDING_PER_REQUESTER`, ADR-0013/0067), commun aux
+            deux catégories. Le
             corps dit le plafond, il n'y a pas de `Retry-After` ; la demande
             est enregistrée comme refusée et auditée. Réessayer n'a de sens
             qu'une fois une demande décidée ou échue.
@@ -671,8 +843,9 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "503":
           description: >
-            Une dépendance ne répond pas — par exemple, les demandes en
-            attente du demandeur n'ont pas pu être comptées : la demande n'est
+            Une dépendance ne répond pas — notamment Workflow Service,
+            Authentication, Authorization, Audit ou PostgreSQL ; la demande
+            en attente n'a pas pu être résolue : elle n'est
             pas acceptée (jamais acceptée « au cas où »). Le corps ne dit pas
             la cause ; elle est dans le journal du Broker.
           content:
@@ -1215,11 +1388,15 @@ paths:
         l'approbateur et ses rôles sont ceux du jeton vérifié par la Gateway —
         tout ce que le client écrirait dans un corps est écarté.
 
+        Pour une demande ordinaire avec `approvalRequired`, l'acteur doit être
+        exactement l'approbateur N+1 figé dans Workflow Service à la création,
+        distinct du demandeur, et détenir une politique
+        `session-approve:account:{targetAccountId}`. Une modification de la
+        hiérarchie n'affecte pas cette demande en attente.
+
         Pour une demande break-glass, l'approbateur détient une politique
         `breakglass-approve:account:{targetAccountId}` ; le break-glass doit
-        toujours être activé et la durée rester dans sa limite. Pour une
-        demande ordinaire d'un compte soumis à approbation (ADR-0067), il
-        détient `session-approve:account:{targetAccountId}`. Dans les deux
+        toujours être activé et la durée rester dans sa limite. Dans les deux
         cas, une autre personne doit décider (comparaison d'identifiants),
         la demande doit être en attente et non périmée, et l'événement de
         décision est audité avant d'agir. L'audit inclut le ticket de la
@@ -1245,7 +1422,8 @@ paths:
           description: >
             Refusé : décision de sa propre demande, politique d'approbation
             absente, dérogation désactivée ou durée hors limite. Le refus est
-            audité (`session.breakglass_approved` ou `session.approval_approved`, échec).
+            audité (`session.breakglass_approved`, `session.approval_approved` ou
+            `workflow.approval_decision_denied`, échec selon le type de demande).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1262,8 +1440,8 @@ paths:
           description: Session inconnue.
         "409":
           description: >
-            Pas une demande en attente : déjà décidée, périmée, ou pas une
-            demande soumise à approbation.
+            Pas une demande en attente : déjà décidée, périmée, pas une demande
+            soumise à approbation, ou affectation Workflow pas encore provisionnée.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1280,13 +1458,14 @@ paths:
       tags: [sessions]
       summary: Rejette une demande en attente
       description: >
-        La demande passe à `denied` et ne pourra jamais être connectée. Même
-        autorité que l'approbation (politique sur
-        `breakglass-approve:account:{targetAccountId}`) : un tiers sans
-        autorité ne peut pas tuer une demande d'urgence de quelqu'un d'autre.
-        Pour une demande ordinaire, l'autorité est
-        `session-approve:account:{targetAccountId}` (ADR-0067) ; le demandeur
-        ne peut pas non plus rejeter sa propre demande. La décision est auditée
+        La demande passe à `denied` et ne pourra jamais être connectée. Le
+        demandeur ne peut jamais rejeter sa propre demande. Pour une demande
+        ordinaire, l'acteur doit être l'approbateur N+1 figé dans Workflow
+        Service à la création et détenir
+        `session-approve:account:{targetAccountId}` (ADR-0138). Pour une demande
+        break-glass, il détient `breakglass-approve:account:{targetAccountId}` ;
+        un tiers sans cette autorité ne peut pas rejeter une demande d'urgence.
+        La décision est auditée
         (`session.breakglass_rejected` ou `session.approval_rejected`) et
         l'événement d'approbation ordinaire inclut le ticket protégé par hash v4.
         Mêmes réponses que `approve`.
@@ -2298,6 +2477,17 @@ components:
       name: pageSize
       in: query
       schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+    HierarchyIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag de la révision globale de hiérarchie lue précédemment (`"hierarchy-N"`).
+      schema: { type: string, pattern: '^"hierarchy-[0-9]+"$' }
     SessionId:
       name: sessionId
       in: path
@@ -2356,6 +2546,80 @@ components:
         acknowledged_at: { type: string, format: date-time }
         acknowledged_by: { type: string, minLength: 1, maxLength: 256 }
         acknowledgement_event_id: { type: string, minLength: 1, maxLength: 256 }
+    SetApprovalManagerRequest:
+      type: object
+      additionalProperties: false
+      required: [managerUserId]
+      properties:
+        managerUserId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+    ApprovalHierarchyRelation:
+      type: object
+      additionalProperties: false
+      required: [userId, managerUserId, updatedAt]
+      properties:
+        userId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+        managerUserId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+        updatedAt: { type: string, format: date-time }
+    ApprovalHierarchyList:
+      allOf:
+        - $ref: "#/components/schemas/PagedResponse"
+        - type: object
+          additionalProperties: false
+          required: [items, revision]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/ApprovalHierarchyRelation" }
+            revision: { type: integer, format: int64, minimum: 0 }
+    ApprovalHierarchyManager:
+      type: object
+      additionalProperties: false
+      required: [userId, managerUserId, revision, updatedAt]
+      properties:
+        userId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+        managerUserId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+        revision: { type: integer, format: int64, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+    ApprovalHierarchyManagerView:
+      type: object
+      additionalProperties: false
+      required: [userId, manager, revision]
+      properties:
+        userId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+        manager:
+          anyOf:
+            - type: object
+              additionalProperties: false
+              required: [userId, updatedAt]
+              properties:
+                userId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+                updatedAt: { type: string, format: date-time }
+            - type: "null"
+        revision: { type: integer, format: int64, minimum: 0 }
+    ApprovalHierarchyDelete:
+      type: object
+      additionalProperties: false
+      required: [revision]
+      properties:
+        revision: { type: integer, format: int64, minimum: 0 }
+    ApprovalHierarchyReport:
+      type: object
+      additionalProperties: false
+      required: [userId, updatedAt]
+      properties:
+        userId: { type: string, minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$" }
+        updatedAt: { type: string, format: date-time }
+    ApprovalHierarchyReports:
+      allOf:
+        - $ref: "#/components/schemas/PagedResponse"
+        - type: object
+          additionalProperties: false
+          required: [items, revision]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/ApprovalHierarchyReport" }
+            revision: { type: integer, format: int64, minimum: 0 }
     Error:
       type: object
       required: [code, message]
@@ -2465,6 +2729,9 @@ components:
             secrets.paste: false
             recordings.read: false
             audit.secretInjections: false
+            approvalHierarchy.read: false
+            approvalHierarchy.manage: false
+            approvalHierarchy.reports: false
     User:
       type: object
       properties:

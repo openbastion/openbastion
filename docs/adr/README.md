@@ -29,6 +29,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 15 | [Agents distribués](#15-agents-distribués) | 9 |
 | 16 | [Posture de sécurité](#16-posture-de-sécurité) | 3 |
 | 17 | [Alignement UI, contrats et roadmap](#17-alignement-ui-contrats-et-roadmap) | 10 |
+| 18 | [Gouvernance et workflows](#18-gouvernance-et-workflows) | 1 |
 
 ### 1. Fondations du code
 
@@ -289,6 +290,14 @@ Traçabilité des écrans, supervision, workflow, secrets dynamiques, alertes et
 | 13 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
 | 14 | [ADR-0134](0134-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Accepté |
 
+### 18. Gouvernance et workflows
+
+Hiérarchie des approbateurs, définition et exécution des processus de validation.
+
+| Ordre | ID | Titre | Statut |
+|---|---|---|---|
+| 1 | [ADR-0138](0138-hierarchie-des-approbateurs-administree-dans-openbastion.md) | La hiérarchie des approbateurs est administrée dans OpenBastion | Accepté |
+
 ## Index numérique
 
 Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été prises.
@@ -432,3 +441,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0135](0135-borner-les-pools-postgresql-par-service-dans-un-budget-de-deploiement.md) | Borner les pools PostgreSQL par service dans un budget de déploiement | Accepté | Fondations du code |
 | [ADR-0136](0136-provenance-des-evenements-par-identite-de-lappelant-mtls.md) | Attribuer l’émetteur d’un événement à l’appelant mTLS immédiat | Accepté | Chaîne d’audit |
 | [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) | La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites | Accepté, mise en œuvre en cours | Interfaces et notifications |
+| [ADR-0138](0138-hierarchie-des-approbateurs-administree-dans-openbastion.md) | La hiérarchie des approbateurs est administrée dans OpenBastion | Accepté | Gouvernance et workflows |

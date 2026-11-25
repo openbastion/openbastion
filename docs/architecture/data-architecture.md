@@ -110,6 +110,7 @@ CREATE TABLE users (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     disabled_at       TIMESTAMPTZ,
+    -- Migration Authentication 010 adds disabled_at; NULL means active.
     UNIQUE (identity_source, identity_provider, external_subject)  -- ADR-0076 : un sub n'est unique que chez son émetteur
 );
 
@@ -216,6 +217,107 @@ CREATE INDEX sessions_pending_approval_idx ON sessions (expires_at, id) WHERE st
 -- `SaveIfUnderPendingLimit` compte puis enregistre dans UNE transaction, sous
 -- `pg_advisory_xact_lock(0x0B7A, hashtext(requested_by))` : deux réplicas du Broker se sérialisent sur le demandeur,
 -- jamais sur la table. Le verrou est levé au COMMIT/ROLLBACK ; une demande arrivée à son échéance cesse de compter.
+
+-- Session Broker — outbox de dispatch vers Workflow (ADR-0138, implémentée)
+-- Insérée dans la même transaction que la session pending_approval et le plafond
+-- commun par demandeur. Aucune justification, identité de manager ou donnée secrète.
+CREATE TABLE session_workflow_outbox (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE RESTRICT,
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    due_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    lease_until TIMESTAMPTZ,
+    lease_token TEXT,
+    last_error_code TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK ((lease_until IS NULL) = (lease_token IS NULL))
+);
+CREATE INDEX session_workflow_outbox_due_idx
+    ON session_workflow_outbox (due_at, session_id);
+
+-- Workflow Service — implémenté : services/access/workflow-service/migrations.
+-- Aucune FK vers users/sessions/privileged_accounts : les identités et sessions
+-- appartiennent à d'autres services. Authentication et Session Broker valident
+-- les références par leurs interfaces mTLS respectives.
+
+CREATE TABLE approval_hierarchy_state (
+    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+    revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO approval_hierarchy_state (singleton, revision)
+VALUES (TRUE, 0) ON CONFLICT (singleton) DO NOTHING;
+
+CREATE TABLE approver_hierarchy (
+    subordinate_user_id TEXT PRIMARY KEY,
+    manager_user_id TEXT NOT NULL,
+    revision BIGINT NOT NULL CHECK (revision > 0),
+    created_by TEXT NOT NULL,
+    updated_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (subordinate_user_id <> manager_user_id)
+);
+CREATE INDEX approver_hierarchy_manager_idx
+    ON approver_hierarchy (manager_user_id, subordinate_user_id);
+
+CREATE TABLE workflow_requests (
+    id TEXT PRIMARY KEY, -- identifiant stable fourni par le Broker (session id)
+    resource_type TEXT NOT NULL CHECK (resource_type = 'session'),
+    resource_id TEXT NOT NULL,
+    requester_user_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    ticket_reference TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected','expired','cancelled')),
+    hierarchy_revision BIGINT NOT NULL CHECK (hierarchy_revision > 0),
+    idempotency_key TEXT NOT NULL UNIQUE,
+    request_hash BYTEA NOT NULL CHECK (octet_length(request_hash) = 32),
+    decision_expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    decided_at TIMESTAMPTZ,
+    decided_by TEXT,
+    decision_reason TEXT NOT NULL DEFAULT '',
+    revision BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),
+    UNIQUE (resource_type, resource_id),
+    CHECK ((status IN ('approved','rejected') AND decided_at IS NOT NULL AND decided_by IS NOT NULL) OR (status NOT IN ('approved','rejected') AND decided_at IS NULL AND decided_by IS NULL))
+);
+CREATE INDEX workflow_requests_pending_expiry_idx
+    ON workflow_requests (decision_expires_at, id) WHERE status = 'pending';
+
+CREATE TABLE workflow_approvals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_request_id TEXT NOT NULL UNIQUE REFERENCES workflow_requests(id) ON DELETE RESTRICT,
+    step_number SMALLINT NOT NULL DEFAULT 1 CHECK (step_number = 1),
+    approver_user_id TEXT NOT NULL, -- snapshot N+1 ; jamais recalculé après création
+    hierarchy_revision BIGINT NOT NULL CHECK (hierarchy_revision > 0),
+    status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected','expired','cancelled')),
+    decided_by TEXT,
+    decided_at TIMESTAMPTZ,
+    decision_reason TEXT NOT NULL DEFAULT '',
+    revision BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK ((status IN ('approved','rejected') AND decided_at IS NOT NULL AND decided_by IS NOT NULL) OR (status NOT IN ('approved','rejected') AND decided_at IS NULL AND decided_by IS NULL))
+);
+CREATE INDEX workflow_approvals_approver_pending_idx
+    ON workflow_approvals (approver_user_id, created_at, id) WHERE status = 'pending';
+
+CREATE TABLE workflow_audit_outbox (
+    event_id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    success BOOLEAN NOT NULL,
+    signed_payload BYTEA NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    due_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX workflow_audit_outbox_due_idx ON workflow_audit_outbox (due_at, event_id);
+
+-- Cycle prevention: every hierarchy write takes one transaction-scoped advisory
+-- lock, traverses the candidate manager chain, and updates this global revision
+-- in the same transaction. This deliberately serializes writes across replicas.
+-- The outbox stores only signed, secret-free audit events; the pre-mutation audit
+-- call must succeed before the hierarchy or approval state is changed.
 
 -- Command Recorder — implémenté : services/recording-audit/command-recorder/migrations.
 -- Écarts assumés par rapport à la première version de ce DDL :
@@ -546,13 +648,14 @@ La clé inclut le service parce qu'une même base peut en porter plusieurs (c'es
 
 **Accès aux données** : chaque magasin est écrit en `database/sql` et SQL explicite, derrière un port de domaine. L'opportunité d'un ORM est analysée dans `docs/architecture/data-access-orm-analysis.md` (recommandation : pas d'ORM complet ; sqlc ou sqlx en option ; des migrations versionnées d'abord).
 
-## 5. Extensions prévues (v0.0.1, hors périmètre de ce document)
+## 5. Extensions et tables hors périmètre immédiat
 
-Ces tables seront détaillées dans une révision ultérieure de ce document, au moment de leur implémentation — elles sont esquissées ici pour anticiper les clés étrangères et éviter une migration douloureuse :
+Les tables déjà livrées sont conservées ici comme référence du schéma réel ; les autres restent des extensions à détailler au moment de leur implémentation :
 
 | Table (v0.0.1) | Service propriétaire | Objet |
 |---|---|---|
-| `workflow_requests`, `approvals` | Workflow Service / Approval Engine | Étapes de validation N+1, référence de ticket externe |
+| `session_workflow_outbox` | Session Broker | Dispatch durable, loué et idempotent des demandes ordinaires vers Workflow (ADR-0138) |
+| `approval_hierarchy_state`, `approver_hierarchy`, `workflow_requests`, `workflow_approvals`, `workflow_audit_outbox` | Workflow Service | Hiérarchie N+1, snapshot immuable, décisions optimistes, expiration et outbox d'audit (ADR-0138) |
 | `notification_log` | Notification Service | Traçabilité des envois Slack/Teams/email |
 | `mfa_factors` | MFA Service | Facteurs enrôlés par utilisateur (TOTP, WebAuthn, PKI) |
 | `identity_provider_configs` | Connecteurs de fédération | Configuration LDAP/AD/Entra ID/SAML |

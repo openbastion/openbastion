@@ -10,6 +10,11 @@ func TestCallerRules(t *testing.T) {
 	mtlstest.Check(t, CallerRules(), []mtlstest.Case{
 		mtlstest.Allow("api-gateway", "POST", "/auth/v1/login"),
 		mtlstest.Allow("api-gateway", "POST", "/auth/v1/verify"),
+		mtlstest.Allow("workflow-service", "GET", "/auth/v1/internal/users/user_123/authorization-context"),
+		mtlstest.Deny("api-gateway", "GET", "/auth/v1/internal/users/user_123/authorization-context"),
+		mtlstest.Deny("session-broker", "GET", "/auth/v1/internal/users/user_123/authorization-context"),
+		mtlstest.Deny("workflow-service", "GET", "/auth/v1/internal/users/user_123/secrets"),
+		mtlstest.Deny("workflow-service", "GET", "/auth/v1/internal/users/user_123/authorization-context/extra"),
 		mtlstest.Allow("admin-cli", "POST", "/auth/v1/users"),
 		// the Gateway cannot mint users, and nobody but the Gateway can verify tokens
 		mtlstest.Deny("api-gateway", "POST", "/auth/v1/users"),
@@ -61,6 +66,7 @@ func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 		{Method: "POST", Path: "/auth/v1/users"},
 		{Method: "POST", Path: "/auth/v1/login"},
 		{Method: "POST", Path: "/auth/v1/verify"},
+		{Method: "GET", Path: "/auth/v1/internal/users/user_123/authorization-context"},
 		{Method: "GET", Path: "/auth/v1/oidc"},
 		{Method: "POST", Path: "/auth/v1/oidc/start"},
 		{Method: "POST", Path: "/auth/v1/oidc/callback"},

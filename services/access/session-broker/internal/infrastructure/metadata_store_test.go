@@ -21,7 +21,7 @@ func attestedSession(t *testing.T, store *infrastructure.PostgresStore, status d
 	t.Helper()
 	now := time.Now().UTC()
 	sess := &domain.Session{
-		ID: uniqueID("sess-meta"), Status: status, Protocol: "rdp", RequestedBy: uniqueID("user"),
+		ID: uniqueID("sess-meta"), Status: status, Protocol: "rdp", RequestedBy: uniqueID("user"), BreakGlass: true,
 		PrivilegedAccountID: uniqueID("acc"), Justification: "ADR-0116", Ticket: "CHG-1",
 		CreatedAt: now, ExpiresAt: now.Add(30 * time.Minute), DurationMinutes: 30, ClipboardToTarget: true,
 	}
@@ -46,7 +46,7 @@ func TestMetadataStore_ASQLWriteToAnyProtectedColumnIsSeen(t *testing.T) {
 		"created_at":            "created_at = created_at - interval '1 day'",
 		"expires_at":            "expires_at = expires_at + interval '1 day'",
 		"terminated_at":         "terminated_at = now()",
-		"break_glass":           "break_glass = true",
+		"break_glass":           "break_glass = false",
 		"duration_minutes":      "duration_minutes = 600",
 		"decided_by":            "decided_by = 'mallory'",
 		"decided_at":            "decided_at = now()",
@@ -79,7 +79,9 @@ func TestMetadataStore_ASQLWriteToAnyProtectedColumnIsSeen(t *testing.T) {
 			if err := store.Save(ctx, &decided); !errors.Is(err, domain.ErrMetadataIntegrity) {
 				t.Fatalf("Save over a forged row: %v", err)
 			}
-			if current == string(domain.StatusPendingApproval) {
+			// A forged break_glass=false row is intentionally outside this query's
+			// predicate; all other tampered pending rows must be rejected while listing.
+			if current == string(domain.StatusPendingApproval) && column != "break_glass" {
 				if _, _, err := store.ListPending(ctx, time.Now(), 10000); !errors.Is(err, domain.ErrMetadataIntegrity) {
 					t.Fatalf("ListPending with a forged row: %v", err)
 				}

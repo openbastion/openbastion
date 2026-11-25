@@ -8,6 +8,10 @@ env:
   GO_VERSION: "1.27.4"
   GOPROXY: direct
   TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
+  ADR0138_WORKFLOW_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/adr0138_workflow_e2e?sslmode=disable
+  ADR0138_BROKER_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/adr0138_broker_e2e?sslmode=disable
+  ADR0138_AUDIT_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/adr0138_audit_e2e?sslmode=disable
+  OPENBASTION_ADR0138_BROWSER_REQUIRED: "1"
   PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, session_alerts, session_alert_detection_outbox, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;
 jobs:
   postgres:
@@ -39,6 +43,11 @@ jobs:
           exit 1
       - name: psql
         run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+      - name: Provision isolated ADR-0138 service databases
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c 'CREATE DATABASE adr0138_workflow_e2e OWNER openbastion'
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c 'CREATE DATABASE adr0138_broker_e2e OWNER openbastion'
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c 'CREATE DATABASE adr0138_audit_e2e OWNER openbastion'
       - run: make proto-tools build
       # The tables exist once a service has migrated them; the unit tests of each store do.
       - name: unit tests with the database
