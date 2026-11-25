@@ -52,7 +52,7 @@ Deux règles guident l'ordre de livraison :
 
 | Domaine | Composants ajoutés |
 |---|---|
-| Proxy | RDP/VNC Proxy, Database Proxy, Kubernetes Proxy |
+| Proxy | RDP/VNC Proxy, Database Proxy (PostgreSQL en premier, ADR-0139 proposé), Kubernetes Proxy |
 | Gouvernance | Workflow Service, Approval Engine (hiérarchie N+1 administrée, ticket de changement contrôlé ; connecteurs ServiceNow/Jira ultérieurs), notifications Slack/Teams (par les services qui les émettent, sans service dédié : ADR-0074) |
 | Sécurité & Intelligence | MFA Service (TOTP, WebAuthn/FIDO2, YubiKey, Passkeys, carte à puce) |
 | Vault | Secrets Manager (secrets applicatifs dynamiques) |
@@ -148,7 +148,7 @@ Ces écrans n'ont pas encore de maquette : elle est à produire dans le fichier 
 | Workflows d'approbation | Demandes, double validation, tickets, échéances | ADR-0067, ADR-0074, ADR-0126 |
 | Secrets dynamiques | Secrets dynamiques, TTL, rotation et révocation | ADR-0005, ADR-0040, ADR-0127 |
 | Identités et fédération | Fournisseurs, fédération et provisioning | ADR-0061, ADR-0076, contrats SCIM/SAML |
-| Accès bases de données et Kubernetes | Accès proxifiés DB et Kubernetes | Database Proxy, Kubernetes Proxy, ADR-0130 |
+| Accès bases de données et Kubernetes | Accès proxifiés DB et Kubernetes | Database Proxy PostgreSQL (ADR-0139 proposé), Kubernetes Proxy (ADR-0130) |
 
 ### v0.0.2 — nouveaux écrans proposés
 
