@@ -79,6 +79,8 @@ export default {
       enableLight: "Activer le thème clair",
     },
     skipToContent: "Aller au contenu principal",
+    forbidden: { title: "Accès refusé", detail: "La capacité « {{capability}} » est requise pour afficher cette page. Le serveur reste l'autorité : demandez l'attribution du droit à un administrateur." },
+    notFound: { title: "Page introuvable", detail: "Cette adresse ne correspond à aucun écran de l'Admin UI." },
     search: { open: "Ouvrir la recherche et les commandes", label: "Rechercher", placeholder: "Rechercher une ressource…" },
     preferences: { open: "Ouvrir les préférences", label: "Préférences" },
     breadcrumb: { aria: "Fil d’Ariane", workspace: "Espace de travail" },

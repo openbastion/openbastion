@@ -20,3 +20,7 @@ deploy/docker-compose/.env.recording
 
 .NOTIFY_INTEROP_TEAMS_URL
 .NOTIFY_INTEROP_SLACK_URL
+
+# Playwright
+/web/admin-ui/test-results/
+/web/admin-ui/playwright-report/
