@@ -23,6 +23,7 @@ services/
     authentication/              Argon2id, JWT
     authorization/               RBAC deny-by-default, un deny explicite l'emporte
     session-broker/              orchestrateur ; ne voit jamais un secret
+    workflow-service/            hiérarchie N+1 et approbations ; propriétaire des relations et snapshots
   proxy/ssh-proxy/               premier proxy réel (golang.org/x/crypto/ssh) ; sshcodec/
   vault/password-vault/          comptes, secrets (chiffrés), scopes à usage unique
   recording-audit/

@@ -4,7 +4,7 @@ Ce document décrit l'implémentation de [ADR-0135](../adr/0135-borner-les-pools
 
 ## Périmètre
 
-Sept services possèdent un pool `database/sql` PostgreSQL : Authentication, Authorization, Session Broker, Audit Service, Password Vault, Command Recorder et Video Recorder. `MaxIdleConns` est un sous-ensemble de `MaxOpenConns` : il ne s'ajoute jamais au budget de connexions ouvertes.
+Huit services possèdent un pool `database/sql` PostgreSQL : Authentication, Authorization, Session Broker, Workflow Service, Audit Service, Password Vault, Command Recorder et Video Recorder. `MaxIdleConns` est un sous-ensemble de `MaxOpenConns` : il ne s'ajoute jamais au budget de connexions ouvertes.
 
 ## Configuration par processus
 
@@ -24,6 +24,7 @@ Les deux variables sont définies par service, pas globalement. Dans les fichier
 | Authentication | `AUTHENTICATION_DB_POOL_MAX_OPEN_CONNS`, `AUTHENTICATION_DB_POOL_MAX_IDLE_CONNS` |
 | Authorization | `AUTHORIZATION_DB_POOL_MAX_OPEN_CONNS`, `AUTHORIZATION_DB_POOL_MAX_IDLE_CONNS` |
 | Session Broker | `SESSION_BROKER_DB_POOL_MAX_OPEN_CONNS`, `SESSION_BROKER_DB_POOL_MAX_IDLE_CONNS` |
+| Workflow Service | `WORKFLOW_SERVICE_DB_POOL_MAX_OPEN_CONNS`, `WORKFLOW_SERVICE_DB_POOL_MAX_IDLE_CONNS` |
 | Audit Service | `AUDIT_SERVICE_DB_POOL_MAX_OPEN_CONNS`, `AUDIT_SERVICE_DB_POOL_MAX_IDLE_CONNS` |
 | Password Vault | `PASSWORD_VAULT_DB_POOL_MAX_OPEN_CONNS`, `PASSWORD_VAULT_DB_POOL_MAX_IDLE_CONNS` |
 | Command Recorder | `COMMAND_RECORDER_DB_POOL_MAX_OPEN_CONNS`, `COMMAND_RECORDER_DB_POOL_MAX_IDLE_CONNS` |
@@ -42,7 +43,7 @@ Après tout override, le manifeste de capacité du cluster doit être ajusté av
 
 ## Budget d'un cluster
 
-Le manifeste d'exemple versionné est [`deploy/postgresql/capacity.yaml`](../../deploy/postgresql/capacity.yaml). Il déclare les sept services et la capacité du serveur PostgreSQL :
+Le manifeste d'exemple versionné est [`deploy/postgresql/capacity.yaml`](../../deploy/postgresql/capacity.yaml). Il déclare les huit services et la capacité du serveur PostgreSQL :
 
 ```yaml
 postgres:
@@ -52,6 +53,7 @@ services:
   authentication: { max_instances: 1, max_open_per_instance: 10 }
   authorization: { max_instances: 1, max_open_per_instance: 10 }
   session-broker: { max_instances: 1, max_open_per_instance: 10 }
+  workflow-service: { max_instances: 1, max_open_per_instance: 10 }
   audit-service: { max_instances: 1, max_open_per_instance: 10 }
   password-vault: { max_instances: 1, max_open_per_instance: 10 }
   command-recorder: { max_instances: 1, max_open_per_instance: 10 }
@@ -64,7 +66,7 @@ Le contrôle applique :
 Σ(max_instances × max_open_per_instance) + reserved_connections <= max_connections
 ```
 
-Pour l'exemple : `7 × 10 + 20 = 90 <= 100`, soit 10 connexions restantes. Les 20 connexions réservées sont illustratives, pas une valeur imposée. `reserved_connections` couvre les clients hors pools applicatifs et les besoins d'exploitation. Les bases séparées d'un même serveur PostgreSQL partagent le même budget.
+Pour l'exemple actuel : `8 × 10 + 20 = 100 <= 100`, soit aucune connexion restante dans cette topologie illustrative. L'exploitant doit augmenter `max_connections`, réduire les plafonds ou ajuster la réserve avant d'ajouter des réplicas. Les 20 connexions réservées sont illustratives, pas une valeur imposée. `reserved_connections` couvre les clients hors pools applicatifs et les besoins d'exploitation. Les bases séparées d'un même serveur PostgreSQL partagent le même budget.
 
 `max_instances` doit inclure le maximum HPA, les réplicas temporaires du rollout (`maxSurge`), les jobs/migrations et les clients temporaires. L'exemple Compose suppose une instance de chaque service ; Video Recorder est compté même si son profil Compose `recording` n'est pas activé. Un manifeste distinct est nécessaire pour chaque cluster PostgreSQL.
 
@@ -79,7 +81,7 @@ make db-pool-budget-check
 Le validateur Go :
 
 - refuse les champs YAML inconnus, clés dupliquées et documents multiples ;
-- exige exactement les sept services PostgreSQL connus ;
+- exige exactement les huit services PostgreSQL connus ;
 - vérifie les bornes et les débordements de multiplication/addition ;
 - refuse tout dépassement de `max_connections` après réserve ;
 - vérifie que les valeurs par défaut `DB_POOL_MAX_OPEN_CONNS` et `DB_POOL_MAX_IDLE_CONNS` injectées dans les services correspondent aux valeurs attendues dans les fichiers `deploy/docker-compose/docker-compose.yml` et `deploy/base44/docker-compose.yml` ;
@@ -101,7 +103,7 @@ Les métriques éclairent un redimensionnement explicite ; elles ne déclenchent
 
 ## Garanties préservées et hors périmètre
 
-- Les sept défauts restent à 10/10 ; aucun gain de performance mesuré localement n'est transformé en défaut de production.
+- Les huit défauts restent à 10/10 ; aucun gain de performance mesuré localement n'est transformé en défaut de production.
 - Aucun cache de la tête Audit et aucun relâchement des vérifications d'intégrité ADR-0116.
 - Aucun PgBouncer introduit ; un pool serveur PgBouncer demanderait un budget séparé.
 - Aucun benchmark multi-hôte lancé ; il reste différé à la demande de l'utilisateur.

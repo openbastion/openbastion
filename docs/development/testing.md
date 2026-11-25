@@ -12,6 +12,22 @@ Les tests d'intégration actuels du dépôt (`test/integration/*_test.go`) tourn
 
 Un service qui touche à la couche proxy ou au Vault (`docs/development/contributing.md`, « Ajouter un nouveau protocole de proxy » ; `docs/security/secrets-management.md`, `docs/security/secure-development.md`, `docs/security/session-security.md`) n'est pas mergeable sans passage vert de `test-security` — ce n'est pas laissé à l'appréciation du relecteur.
 
+## Workflow N+1 réel (ADR-0138)
+
+`TestADR0138WorkflowApproval_MTLSPostgres` (`test/integration/adr0138_workflow_approval_mtls_postgres_test.go`) lance Authentication, Authorization, Vault, Workflow Service, Session Broker, Audit Service et API Gateway comme processus indépendants. Les appels inter-services utilisent la PKI de test et mTLS ; Workflow, Broker et Audit ont chacun une base PostgreSQL isolée. Si Chromium est disponible (`CHROME` ou `google-chrome`/`chromium` dans `PATH`) et si `web/admin-ui/dist` existe, le test pilote également le véritable Admin UI via Chrome DevTools Protocol : affectation du supérieur, lecture de la file, confirmation de l'approbation. Sans navigateur ou build UI, le parcours API/PostgreSQL/mTLS reste exécuté et la partie navigateur est sautée.
+
+Préparer trois bases dédiées (ne pas réutiliser la base partagée `TEST_DATABASE_URL`, les services possèdent chacun leur historique de migrations) puis lancer :
+
+```sh
+export ADR0138_WORKFLOW_DATABASE_URL='postgres://USER:PASS@127.0.0.1:5432/adr0138_workflow_e2e?sslmode=disable'
+export ADR0138_BROKER_DATABASE_URL='postgres://USER:PASS@127.0.0.1:5432/adr0138_broker_e2e?sslmode=disable'
+export ADR0138_AUDIT_DATABASE_URL='postgres://USER:PASS@127.0.0.1:5432/adr0138_audit_e2e?sslmode=disable'
+make ui-build
+CHROME=/path/to/chrome go test ./test/integration -run TestADR0138WorkflowApproval_MTLSPostgres -count=1 -v
+```
+
+Le test vérifie aussi le snapshot immuable de l'approbateur après changement de hiérarchie, le refus d'une décision par le demandeur ou le nouveau supérieur, l'achèvement de l'outbox durable, les événements Workflow signés et la vérification de la chaîne d'audit. Le job PostgreSQL CI crée ces trois bases éphémères avant la suite d'intégration.
+
 ## Cible VNC réelle (ADR-0071)
 
 Les refus de `pkg/vnc` se prouvent contre le serveur factice de ses tests ; l'interopérabilité, contre un vrai serveur. `test/integration/testdata/vnc/target.sh` démarre un TigerVNC réel sans Docker et sans rien installer (paquets Debian/Ubuntu dépaquetés dans un répertoire de travail, espace de noms utilisateur non privilégié) :

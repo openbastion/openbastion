@@ -8,7 +8,9 @@ package infrastructure
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -375,6 +377,120 @@ func (s *PostgresStore) SaveIfUnderPendingLimit(ctx context.Context, sess *domai
 	return true, nil
 }
 
+// SavePendingWithWorkflowOutbox atomically persists an ordinary pending session and its dispatch.
+func (s *PostgresStore) SavePendingWithWorkflowOutbox(ctx context.Context, sess *domain.Session, limit int, now time.Time) (bool, error) {
+	if sess.BreakGlass {
+		return false, fmt.Errorf("workflow outbox cannot dispatch break-glass sessions")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, pendingLockClass, sess.RequestedBy); err != nil {
+		return false, err
+	}
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE status=$1 AND requested_by=$2 AND expires_at >= $3 AND NOT legacy_unverified`, string(domain.StatusPendingApproval), sess.RequestedBy, now).Scan(&n); err != nil {
+		return false, err
+	}
+	if n >= limit {
+		return false, nil
+	}
+	written, err := s.saveTx(ctx, tx, sess)
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO session_workflow_outbox (session_id, due_at, created_at) VALUES ($1,$2,$2)`, sess.ID, now); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	if err := s.attest(ctx, written); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *PostgresStore) ClaimWorkflowDispatches(ctx context.Context, now time.Time, lease time.Duration, limit int) ([]domain.WorkflowDispatch, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `SELECT session_id, attempts, due_at, last_error_code, created_at FROM session_workflow_outbox WHERE due_at <= $1 AND (lease_until IS NULL OR lease_until <= $1) ORDER BY due_at, session_id LIMIT $2 FOR UPDATE SKIP LOCKED`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	var items []domain.WorkflowDispatch
+	for rows.Next() {
+		var item domain.WorkflowDispatch
+		if err := rows.Scan(&item.SessionID, &item.Attempts, &item.DueAt, &item.LastErrorCode, &item.CreatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	for i := range items {
+		var raw [16]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			return nil, err
+		}
+		token := "lease_" + hex.EncodeToString(raw[:])
+		until := now.Add(lease)
+		if _, err := tx.ExecContext(ctx, `UPDATE session_workflow_outbox SET lease_until=$1, lease_token=$2, attempts=attempts+1 WHERE session_id=$3`, until, token, items[i].SessionID); err != nil {
+			return nil, err
+		}
+		items[i].LeaseUntil, items[i].LeaseToken, items[i].Attempts = &until, token, items[i].Attempts+1
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s *PostgresStore) CompleteWorkflowDispatch(ctx context.Context, sessionID, leaseToken string) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM session_workflow_outbox WHERE session_id=$1 AND lease_token=$2`, sessionID, leaseToken)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return domain.ErrConflict
+	}
+	return nil
+}
+
+func (s *PostgresStore) RetryWorkflowDispatch(ctx context.Context, sessionID, leaseToken, errorCode string, dueAt time.Time) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE session_workflow_outbox SET due_at=$1, last_error_code=$2, lease_until=NULL, lease_token=NULL WHERE session_id=$3 AND lease_token=$4`, dueAt, errorCode, sessionID, leaseToken)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return domain.ErrConflict
+	}
+	return nil
+}
+
+func (s *PostgresStore) HasPendingWorkflowDispatches(ctx context.Context) (bool, error) {
+	var pending bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM session_workflow_outbox)`).Scan(&pending)
+	return pending, err
+}
+
 // SaveIfStatus is the compare-and-swap of domain.SessionRepository: the row is locked, and changed
 // only if its status is still the one expected, so that of two decisions on the same pending request
 // exactly one goes through, whichever Broker replica they reached.
@@ -459,7 +575,7 @@ func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit in
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+sessionColumns+`
 		FROM sessions
-		WHERE status = $1 AND expires_at >= $2 AND NOT legacy_unverified
+		WHERE status = $1 AND expires_at >= $2 AND break_glass = TRUE AND NOT legacy_unverified
 		ORDER BY expires_at, id
 		LIMIT $3`, string(domain.StatusPendingApproval), now, limit+1)
 	if err != nil {

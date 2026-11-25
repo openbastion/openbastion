@@ -13,8 +13,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
@@ -64,6 +66,7 @@ func runService() {
 	authenticationURL := mustEnv("AUTHENTICATION_URL", rt.DefaultURL("127.0.0.1:8086"))
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
+	workflowURL := mustEnv("WORKFLOW_SERVICE_URL", rt.DefaultURL("127.0.0.1:8091"))
 	sshProxyURLs := proxyURLsFor("SSH_PROXY_URLS", "SSH_PROXY_URL", rt.DefaultURL("127.0.0.1:8085"))
 	vncProxyURLs := proxyURLsFor("RDP_VNC_PROXY_URLS", "RDP_VNC_PROXY_URL", rt.DefaultURL("127.0.0.1:8090"))
 
@@ -114,6 +117,7 @@ func runService() {
 	mfaAction := &infrastructure.MFAActionClient{BaseURL: authenticationURL, Client: peer(authenticationURL, mtls.Authentication)}
 	vault := &infrastructure.VaultAuthorizationHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: peer(auditURL, mtls.AuditService)}
+	workflow := &infrastructure.WorkflowHTTPClient{BaseURL: workflowURL, Client: peer(workflowURL, mtls.WorkflowService)}
 	if pgStore != nil {
 		// ADR-0116 §3, §6: each committed change of a session's row moves its independent head in
 		// the Audit Service, and is confirmed only once it has; every read a decision rests on
@@ -150,7 +154,8 @@ func runService() {
 		WithAfterUseRotation(vault).
 		WithMFAActionClient(mfaAction).
 		// An operator's password, encrypted for the screen proxy (ADR-0133): its token goes there.
-		WithPasteProxy(proxy)
+		WithPasteProxy(proxy).
+		WithWorkflowApprovalClient(workflow)
 
 	// Sessions and requests past their end are expired, once, and each expiry is written to
 	// the audit (ADR-0034). Always on: an end is a fact, not an option.
@@ -159,6 +164,9 @@ func runService() {
 	}
 	sweep := boundedIntEnv("SESSION_EXPIRY_SWEEP_SECONDS", 30, 1, 3600)
 	go expireEvery(svc, time.Duration(sweep)*time.Second)
+	ctx, stopWorkflowDispatch := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopWorkflowDispatch()
+	go svc.RunWorkflowDispatch(ctx)
 	log.Printf("session-broker: sessions and requests past their end are expired every %ds, each expiry written to the audit", sweep)
 
 	// What the refused reads of one user may write to the audit (ADR-0020): a burst, then a
@@ -292,6 +300,7 @@ func runService() {
 	log.Printf("  -> authentication: %s (mTLS action step-up)", authenticationURL)
 	log.Printf("  -> vault:         %s", vaultURL)
 	log.Printf("  -> audit:         %s", auditURL)
+	log.Printf("  -> workflow:      %s", workflowURL)
 	log.Printf("  -> ssh-proxy:     %s", strings.Join(sshProxyURLs, ", "))
 	if poolDB != nil {
 		srv.WithMetrics(dbpool.MetricsHandler("session-broker", poolDB, poolConfig))

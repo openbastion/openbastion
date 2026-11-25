@@ -83,6 +83,39 @@ func TestPostgresStore_GetByID_FindsTheSameRowAsGetByUsername(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_DisabledAtRoundTripsAndLegacyUsersRemainActive(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+
+	activeUsername := uniqueUsername("pg-user-active")
+	active := &domain.User{ID: "user_" + activeUsername, Username: activeUsername, DisplayName: "Legacy Active", Roles: []string{"dba"}}
+	if err := store.Create(ctx, active); err != nil {
+		t.Fatalf("Create active user: %v", err)
+	}
+	gotActive, err := store.GetByID(ctx, active.ID)
+	if err != nil {
+		t.Fatalf("GetByID active user: %v", err)
+	}
+	if gotActive.DisabledAt != nil {
+		t.Fatalf("legacy/default user must remain active, disabled_at = %v", gotActive.DisabledAt)
+	}
+
+	disabledUsername := uniqueUsername("pg-user-disabled")
+	disabledAt := time.Date(2026, 11, 24, 13, 0, 0, 123000, time.UTC)
+	disabled := &domain.User{ID: "user_" + disabledUsername, Username: disabledUsername, DisplayName: "Disabled", Roles: []string{"platform-admin"}, DisabledAt: &disabledAt}
+	if err := store.Create(ctx, disabled); err != nil {
+		t.Fatalf("Create disabled user: %v", err)
+	}
+	gotDisabled, err := store.GetByID(ctx, disabled.ID)
+	if err != nil {
+		t.Fatalf("GetByID disabled user: %v", err)
+	}
+	if gotDisabled.DisabledAt == nil || !gotDisabled.DisabledAt.Equal(disabledAt) {
+		t.Fatalf("disabled_at did not round-trip: got %v, want %v", gotDisabled.DisabledAt, disabledAt)
+	}
+}
+
 func TestPostgresStore_Create_RejectsDuplicateUsernameWithTheSameSentinelAsInMemoryStore(t *testing.T) {
 	// Both storage engines must behave identically to callers — the same
 	// discipline that let the two real bugs in NOTES_SANDBOX.md surface

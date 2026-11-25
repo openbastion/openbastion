@@ -43,7 +43,7 @@ func (downAuthz) CheckAccess(context.Context, []string, string, string) (bool, s
 
 // approvalService is the Broker on its strict default: approval required, nobody told otherwise.
 func approvalService(authz application.AuthorizationClient, audit application.AuditEmitter) *application.SessionBrokerService {
-	return application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), authz, okVault{}, audit, oneAccount{}, failingProxy{}).WithBreakGlass(30)
+	return application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), authz, okVault{}, audit, oneAccount{}, failingProxy{}).WithBreakGlass(30).WithWorkflowApprovalClient(newTestWorkflow())
 }
 
 func send(svc *application.SessionBrokerService, method, path, body string) *httptest.ResponseRecorder {

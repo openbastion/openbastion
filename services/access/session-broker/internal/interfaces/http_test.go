@@ -310,7 +310,7 @@ func (gatedAccount) CheckAccount(context.Context, string) (bool, string, error) 
 // with one out of format, is a 400 that says so; with one, it is a 201 pending_approval that
 // carries the ticket back.
 func TestCreateSession_AnAccountThatRequiresApproval_TakesATicket_OverHTTP(t *testing.T) {
-	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, gatedAccount{}, failingProxy{})
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, gatedAccount{}, failingProxy{}).WithWorkflowApprovalClient(newTestWorkflow())
 	base := `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"patch","durationMinutes":45`
 	for _, body := range []string{base + `}`, base + `,"ticket":"INC 1; drop"}`} {
 		rec := postSession(t, svc, body)
@@ -333,7 +333,7 @@ func TestCreateSession_AnAccountThatRequiresApproval_TakesATicket_OverHTTP(t *te
 
 func TestCreateSession_NonStringTicketIsAuditedAsARefusal(t *testing.T) {
 	audit := &approvalAudit{}
-	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, audit, gatedAccount{}, failingProxy{})
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, audit, gatedAccount{}, failingProxy{}).WithWorkflowApprovalClient(newTestWorkflow())
 	body := `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"patch","durationMinutes":45,"ticket":42}`
 	rec := postSession(t, svc, body)
 	if rec.Code != http.StatusBadRequest || len(audit.events) != 1 {

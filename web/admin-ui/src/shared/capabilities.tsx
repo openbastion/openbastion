@@ -30,6 +30,9 @@ export const capabilityNames = [
   "secrets.paste",
   "recordings.read",
   "audit.secretInjections",
+  "approvalHierarchy.read",
+  "approvalHierarchy.manage",
+  "approvalHierarchy.reports",
 ] as const;
 
 export type Capability = (typeof capabilityNames)[number];

@@ -93,3 +93,15 @@ func (s Session) EffectiveStatus(now time.Time) SessionStatus {
 type ClipboardRights struct {
 	ToTarget, FromTarget bool
 }
+
+// WorkflowDispatch is a durable Session Broker outbox row. Lease ownership is
+// token-fenced so an expired worker cannot complete another worker's claim.
+type WorkflowDispatch struct {
+	SessionID     string
+	Attempts      int
+	DueAt         time.Time
+	LeaseUntil    *time.Time
+	LeaseToken    string
+	LastErrorCode string
+	CreatedAt     time.Time
+}

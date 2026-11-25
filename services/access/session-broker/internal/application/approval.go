@@ -68,8 +68,8 @@ func (s *SessionBrokerService) countPending(ctx context.Context, requestedBy str
 	return nil
 }
 
-// savePending stores a request that waits for a second person — a break-glass one
-// (ADR-0011) or one on an account that requires approval (ADR-0067) — once its request
+// savePending stores a break-glass request that waits for a second person (ADR-0011) —
+// once its request
 // event is on the audit trail: under the requester's limit, with the deadline for a
 // decision, then notified. action is the request event, written again as a refusal if
 // another request of the same requester took the last place first.
@@ -104,9 +104,9 @@ func (s *SessionBrokerService) savePending(ctx context.Context, sess *domain.Ses
 }
 
 // requestApproval is the request for an ordinary session on an account that requires
-// another person's approval (ADR-0067). The ticket is checked against the declared
-// format, the requester's limit of requests waiting is the break-glass one, and the
-// request is on the audit trail BEFORE it is stored: without the event, no request.
+// another person's approval (ADR-0067/0138). The ticket is checked against the declared
+// format, the requester's limit is shared with break-glass, and the request is on the
+// audit trail BEFORE the session and its Workflow outbox are stored in one transaction.
 // Every refusal is a denied session and an audited one, under the same action.
 func (s *SessionBrokerService) requestApproval(ctx context.Context, sess *domain.Session, ticketInput ApprovalTicketInput, now time.Time) (*domain.Session, error) {
 	const action = "session.approval_requested"
@@ -140,5 +140,38 @@ func (s *SessionBrokerService) requestApproval(ctx context.Context, sess *domain
 		_ = s.sessions.Save(ctx, sess)
 		return nil, fmt.Errorf("%w: cannot accept the request: audit emission failed (fail-closed, docs/deployment/high-availability.md §1): %w", domain.ErrUnavailable, err)
 	}
-	return s.savePending(ctx, sess, now, action, domain.NotifyApprovalRequested, map[string]string{"ticket": ticket})
+	return s.savePendingWorkflow(ctx, sess, now, action, map[string]string{"ticket": ticket})
+}
+
+// savePendingWorkflow persists the ordinary pending session and its durable dispatch
+// together. No approver notification or approval queue entry exists until Workflow
+// confirms the N+1 snapshot.
+func (s *SessionBrokerService) savePendingWorkflow(ctx context.Context, sess *domain.Session, now time.Time, action string, details map[string]string) (*domain.Session, error) {
+	if s.workflow == nil {
+		sess.Status = domain.StatusDenied
+		if err := s.sessions.Save(ctx, sess); err != nil {
+			return nil, fmt.Errorf("%w: Workflow Service is not configured and denied session could not be recorded: %v", domain.ErrUnavailable, err)
+		}
+		if err := s.emitAudit(ctx, sess.RequestedBy, action, "session", sess.ID, details, false); err != nil {
+			return nil, fmt.Errorf("%w: Workflow Service is not configured and refusal could not be audited: %v", domain.ErrUnavailable, err)
+		}
+		return nil, fmt.Errorf("%w: Workflow Service is not configured", domain.ErrUnavailable)
+	}
+	sess.Status = domain.StatusPendingApproval
+	sess.ExpiresAt = now.Add(s.window())
+	saved, err := s.sessions.SavePendingWithWorkflowOutbox(ctx, sess, s.maxPending(), now)
+	if err != nil {
+		return nil, fmt.Errorf("%w: persisting pending session and Workflow outbox: %w", domain.ErrUnavailable, err)
+	}
+	if !saved {
+		sess.Status = domain.StatusDenied
+		if err := s.sessions.Save(ctx, sess); err != nil {
+			return nil, fmt.Errorf("%w: recording refused approval request: %w", domain.ErrUnavailable, err)
+		}
+		if err := s.emitAudit(ctx, sess.RequestedBy, action, "session", sess.ID, details, false); err != nil {
+			return nil, fmt.Errorf("%w: auditing refused approval request: %w", domain.ErrUnavailable, err)
+		}
+		return nil, fmt.Errorf("approval request refused: %w", s.tooManyPending())
+	}
+	return sess, nil
 }

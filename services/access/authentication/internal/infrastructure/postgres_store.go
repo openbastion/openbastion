@@ -73,9 +73,9 @@ func (s *PostgresStore) Create(ctx context.Context, u *domain.User) error {
 		roles = []string{}
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO users (id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		u.ID, u.Username, u.DisplayName, u.PasswordHash, pq.Array(roles), sourceOrLocal(u.IdentitySource), u.IdentityProvider, u.ExternalSubject)
+		INSERT INTO users (id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject, disabled_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		u.ID, u.Username, u.DisplayName, u.PasswordHash, pq.Array(roles), sourceOrLocal(u.IdentitySource), u.IdentityProvider, u.ExternalSubject, u.DisabledAt)
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" { // unique_violation
@@ -88,25 +88,30 @@ func (s *PostgresStore) Create(ctx context.Context, u *domain.User) error {
 
 func (s *PostgresStore) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject
+		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject, disabled_at
 		FROM users WHERE username = $1`, username)
 	return scanUser(row)
 }
 
 func (s *PostgresStore) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject
+		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject, disabled_at
 		FROM users WHERE id = $1`, id)
 	return scanUser(row)
 }
 
 func scanUser(row *sql.Row) (*domain.User, error) {
 	var u domain.User
-	if err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, pq.Array(&u.Roles), &u.IdentitySource, &u.IdentityProvider, &u.ExternalSubject); err != nil {
+	var disabledAt sql.NullTime
+	if err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, pq.Array(&u.Roles), &u.IdentitySource, &u.IdentityProvider, &u.ExternalSubject, &disabledAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, err
+	}
+	if disabledAt.Valid {
+		value := disabledAt.Time.UTC()
+		u.DisabledAt = &value
 	}
 	return &u, nil
 }
@@ -124,7 +129,7 @@ func (s *PostgresStore) GetByExternalSubject(ctx context.Context, source, provid
 		return nil, ErrUserNotFound
 	}
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject
+		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject, disabled_at
 		FROM users WHERE identity_source = $1 AND identity_provider = $2 AND external_subject = $3`, source, provider, subject)
 	return scanUser(row)
 }

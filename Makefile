@@ -89,6 +89,7 @@ build: proto-gen
 		./services/access/authentication/... \
 		./services/access/authorization/... \
 		./services/access/session-broker/... \
+		./services/access/workflow-service/... \
 		./services/proxy/ssh-proxy/... \
 		./services/proxy/rdp-vnc-proxy/... \
 		./services/vault/password-vault/... \
@@ -127,6 +128,7 @@ vet: proto-gen
 	$(GO) vet ./services/access/authentication/...
 	$(GO) vet ./services/access/authorization/...
 	$(GO) vet ./services/access/session-broker/...
+	$(GO) vet ./services/access/workflow-service/...
 	$(GO) vet ./services/proxy/ssh-proxy/...
 	$(GO) vet ./services/proxy/rdp-vnc-proxy/...
 	$(GO) vet ./services/vault/password-vault/...
@@ -164,6 +166,7 @@ test: proto-gen
 		./services/access/authentication/... \
 		./services/access/authorization/... \
 		./services/access/session-broker/... \
+		./services/access/workflow-service/... \
 		./services/proxy/ssh-proxy/... \
 		./services/proxy/rdp-vnc-proxy/... \
 		./services/vault/password-vault/... \
@@ -307,7 +310,8 @@ test-postgres: proto-gen
 		echo "TEST_DATABASE_URL non défini — voir NOTES_SANDBOX.md"; exit 1; \
 	fi
 	@command -v psql >/dev/null 2>&1 || { echo "psql introuvable — nécessaire pour purger la base avant les tests PostgreSQL (voir NOTES_SANDBOX.md)"; exit 1; }
-	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, session_alerts, session_alert_detection_outbox, mfa_challenges, mfa_action_challenges, mfa_action_grants, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;"
+	$(GO) test ./services/access/workflow-service/internal/infrastructure/... -run TestPostgres -v -count=1
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, session_workflow_outbox, sessions, approval_hierarchy_state, approver_hierarchy, workflow_requests, workflow_approvals, workflow_audit_outbox, audit_events, alert_outbox, session_alerts, session_alert_detection_outbox, mfa_challenges, mfa_action_challenges, mfa_action_grants, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;"
 	$(GO) test ./services/vault/password-vault/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/authorization/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/authentication/internal/infrastructure/... -run TestPostgres -v -count=1
@@ -315,7 +319,7 @@ test-postgres: proto-gen
 	$(GO) test ./services/recording-audit/audit-service/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/command-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/video-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
-	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, session_alerts, session_alert_detection_outbox, mfa_challenges, mfa_action_challenges, mfa_action_grants, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings, video_recording_segments, video_recordings RESTART IDENTITY CASCADE;"
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, session_workflow_outbox, sessions, approval_hierarchy_state, approver_hierarchy, workflow_requests, workflow_approvals, workflow_audit_outbox, audit_events, alert_outbox, session_alerts, session_alert_detection_outbox, mfa_challenges, mfa_action_challenges, mfa_action_grants, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings, video_recording_segments, video_recordings RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=300s
 	$(GO) test ./test/integration/... -run TestScreenFlow -v -count=1 -timeout=300s
 
@@ -391,6 +395,10 @@ run-video-recorder:
 run-broker:
 	$(call tls,session-broker) \
 		$(GO) run ./services/access/session-broker/cmd/session-broker
+run-workflow-service:
+	$(call tls,workflow-service) AUTHENTICATION_URL=$(SCHEME)://127.0.0.1:8086 \
+		AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 AUDIT_URL=$(SCHEME)://127.0.0.1:8082 \
+		$(GO) run ./services/access/workflow-service/cmd/workflow-service
 # Le listener public de la Gateway reste en HTTP (le TLS se termine à l'arête) ;
 # elle a une identité pour ses appels sortants.
 # SESSION_REQUEST_BURST (défaut 10, de 1 à 1000) et SESSION_REQUEST_RATE_PER_MINUTE (défaut 6,
@@ -408,6 +416,7 @@ run-broker:
 # les valeurs douteuses arrêtent la Gateway.
 run-gateway:
 	$(call tls,api-gateway) COMMAND_RECORDER_URL=$(SCHEME)://127.0.0.1:8087 \
+		WORKFLOW_SERVICE_URL=$(SCHEME)://127.0.0.1:8091 \
 		$(GO) run ./services/access/api-gateway/cmd/api-gateway
 
 clean:

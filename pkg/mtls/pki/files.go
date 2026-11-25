@@ -12,7 +12,7 @@ import (
 
 // StandardServices are the identities of a complete OpenBastion deployment.
 var StandardServices = []string{
-	mtls.APIGateway, mtls.Authentication, mtls.Authorization, mtls.SessionBroker,
+	mtls.APIGateway, mtls.Authentication, mtls.Authorization, mtls.SessionBroker, mtls.WorkflowService,
 	mtls.SSHProxy, mtls.RDPVNCProxy, mtls.PasswordVault, mtls.AuditService, mtls.CommandRecorder,
 	mtls.VideoRecorder, mtls.SeaweedFS, mtls.AdminCLI,
 }

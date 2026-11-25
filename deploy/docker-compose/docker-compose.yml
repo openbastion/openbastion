@@ -54,6 +54,7 @@ services:
       PG_PASSWORD_AUTHENTICATION: ${PG_PASSWORD_AUTHENTICATION:?}
       PG_PASSWORD_AUTHORIZATION: ${PG_PASSWORD_AUTHORIZATION:?}
       PG_PASSWORD_SESSION_BROKER: ${PG_PASSWORD_SESSION_BROKER:?}
+      PG_PASSWORD_WORKFLOW_SERVICE: ${PG_PASSWORD_WORKFLOW_SERVICE:?}
       PG_PASSWORD_PASSWORD_VAULT: ${PG_PASSWORD_PASSWORD_VAULT:?}
       PG_PASSWORD_AUDIT_SERVICE: ${PG_PASSWORD_AUDIT_SERVICE:?}
       PG_PASSWORD_COMMAND_RECORDER: ${PG_PASSWORD_COMMAND_RECORDER:?}
@@ -351,6 +352,33 @@ services:
       audit-service: {condition: service_started}
       video-recorder: {condition: service_healthy}
 
+  workflow-service:
+    <<: *service
+    entrypoint: ["/usr/local/bin/workflow-service"]
+    environment:
+      <<: *tls
+      PORT: "8091"
+      AUTHENTICATION_URL: https://authentication:8086
+      AUTHORIZATION_URL: https://authorization:8083
+      AUDIT_URL: https://audit-service:8082
+      DATABASE_URL: postgres://workflow_service:${PG_PASSWORD_WORKFLOW_SERVICE}@postgres:5432/workflow_service?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${WORKFLOW_SERVICE_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${WORKFLOW_SERVICE_DB_POOL_MAX_IDLE_CONNS-10}
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: workflow-service}}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/workflow-service", "probe", "--port", "8091", "--path", "/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+      authentication: {condition: service_healthy}
+      authorization: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+
   session-broker:
     <<: *service
     entrypoint: ["/usr/local/bin/session-broker"]
@@ -360,6 +388,7 @@ services:
       AUTHORIZATION_URL: https://authorization:8083
       VAULT_URL: https://password-vault:8081
       AUDIT_URL: https://audit-service:8082
+      WORKFLOW_SERVICE_URL: https://workflow-service:8091
       SSH_PROXY_URL: https://ssh-proxy:8085
       RDP_VNC_PROXY_URL: https://rdp-vnc-proxy:8090
       RDP_ENABLED: ${RDP_ENABLED:-true}
@@ -368,6 +397,14 @@ services:
       DB_POOL_MAX_IDLE_CONNS: ${SESSION_BROKER_DB_POOL_MAX_IDLE_CONNS-10}
       # ADR-0116: the HMAC key of the session metadata, drawn once by the pki job, never in PostgreSQL.
       SESSION_METADATA_HMAC_KEY_FILE: /pki/session-metadata.key
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+      authorization: {condition: service_healthy}
+      password-vault: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+      ssh-proxy: {condition: service_healthy}
+      workflow-service: {condition: service_healthy}
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
 
@@ -380,6 +417,7 @@ services:
       AUTHENTICATION_URL: https://authentication:8086
       AUTHORIZATION_URL: https://authorization:8083
       SESSION_BROKER_URL: https://session-broker:8084
+      WORKFLOW_SERVICE_URL: https://workflow-service:8091
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
       VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
@@ -388,6 +426,7 @@ services:
       ADMIN_UI_DIR: /usr/local/share/openbastion/admin-ui
     depends_on:
       audit-service: {condition: service_healthy}
+      workflow-service: {condition: service_healthy}
     ports:
       - "${OB_BIND:-127.0.0.1}:${OB_GATEWAY_PORT:-8080}:8080"
     volumes:

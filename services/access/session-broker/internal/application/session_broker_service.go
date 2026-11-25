@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -117,6 +118,17 @@ type ApprovalNotifier interface {
 	Notify(ctx context.Context, n domain.ApprovalNotification)
 }
 
+// WorkflowApprovalClient is the Session Broker's only route to ordinary
+// approval requests. The Broker persists the session and its outbox before
+// invoking this port; the Workflow Service owns approver resolution and decisions.
+type WorkflowApprovalClient interface {
+	CreateApprovalRequest(ctx context.Context, input domain.WorkflowApprovalInput) (*domain.WorkflowApprovalRequest, error)
+	GetApprovalRequest(ctx context.Context, requestID string) (*domain.WorkflowApprovalRequest, error)
+	ListPendingApprovals(ctx context.Context, actorID string, actorRoles []string, page, pageSize int) (domain.WorkflowApprovalPage, error)
+	DecideApprovalRequest(ctx context.Context, requestID, actorID string, actorRoles []string, expectedRevision uint64, decision domain.WorkflowApprovalStatus, reason string) (*domain.WorkflowApprovalRequest, error)
+	CancelApprovalRequest(ctx context.Context, requestID string, expectedRevision uint64, reasonCode string) (*domain.WorkflowApprovalRequest, error)
+}
+
 // ProxySelector resolves which proxy family serves a given protocol. ConnectDetails refuses RDP
 // before issuing a Vault scope unless RDP_ENABLED turned it on (ADR-0088); the family owns
 // revocation for that session either way.
@@ -143,6 +155,7 @@ type SessionBrokerService struct {
 	// the stored session, never supplied by the operator at attach time.
 	proxy     ProxyClient
 	proxies   ProxySelector
+	workflow  WorkflowApprovalClient
 	mfaAction MFAActionClient
 	// pasteProxy hands an operator's paste token to the screen proxy (ADR-0133); nil, no paste.
 	pasteProxy PasteProxy
@@ -370,6 +383,11 @@ func (s *SessionBrokerService) window() time.Duration {
 func NewSessionBrokerService(sessions domain.SessionRepository, authz AuthorizationClient, vault VaultAuthorizer, audit AuditEmitter, accounts AccountLookup, proxy ProxyClient) *SessionBrokerService {
 	return &SessionBrokerService{sessions: sessions, authz: authz, vault: vault, audit: audit, accounts: accounts, proxy: proxy,
 		readRefusals: refusalbudget.New(0, 0)}
+}
+
+func (s *SessionBrokerService) WithWorkflowApprovalClient(client WorkflowApprovalClient) *SessionBrokerService {
+	s.workflow = client
+	return s
 }
 
 // CreateSession implements SessionOrchestration.CreateSession. A request that passes
@@ -855,6 +873,9 @@ func (s *SessionBrokerService) decide(ctx context.Context, sessionID, decidedBy 
 	if err := sess.RequireAttested(); err != nil {
 		return nil, err
 	}
+	if !sess.BreakGlass && sess.ApprovalRequired {
+		return s.decideOrdinaryApproval(ctx, sess, decidedBy, actorRoles, approve)
+	}
 
 	// A break-glass request is decided under its own rules and by its own approvers
 	// (ADR-0011); a request on an account that requires approval, by the account's
@@ -1006,39 +1027,41 @@ func (s *SessionBrokerService) ListPendingApprovals(ctx context.Context, callerI
 	if callerID == "" {
 		return nil, 0, false, fmt.Errorf("%w: a listing needs an authenticated user", domain.ErrForbidden)
 	}
+	if s.workflow == nil {
+		return nil, 0, false, domain.ErrUnavailable
+	}
 	page, pageSize = ClampPage(page, pageSize)
 	items = []*domain.Session{}
-
-	pending, more, err := s.sessions.ListPending(ctx, s.clock(), MaxPendingScanned)
-	if err != nil {
-		return nil, 0, false, fmt.Errorf("%w (listing pending requests: %v)", domain.ErrUnavailable, err)
+	// Do not return a partial approval queue while a durable ordinary-request
+	// dispatch is unresolved: the missing approver assignment could change who
+	// is entitled to see and decide the queue (ADR-0138).
+	pendingDispatch, err := s.sessions.HasPendingWorkflowDispatches(ctx)
+	if err != nil || pendingDispatch {
+		return nil, 0, false, fmt.Errorf("%w: Workflow dispatch is not fully provisioned", domain.ErrUnavailable)
 	}
 
-	authority := map[string]bool{} // per resource: the answer of the Authorization Service
-	var visible []*domain.Session
-	for _, sess := range pending {
-		if sess.RequestedBy == callerID {
+	const perSourceLimit = MaxPendingScanned
+	breakGlassPending, breakGlassMore, err := s.sessions.ListPending(ctx, s.clock(), perSourceLimit)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("%w (listing break-glass requests: %v)", domain.ErrUnavailable, err)
+	}
+	workflowPage, err := s.workflow.ListPendingApprovals(ctx, callerID, actorRoles, 1, perSourceLimit)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("%w (listing Workflow approvals: %v)", domain.ErrUnavailable, err)
+	}
+
+	authority := map[string]bool{}
+	visible := make([]*domain.Session, 0, len(breakGlassPending)+len(workflowPage.Items))
+	for _, sess := range breakGlassPending {
+		if sess.RequestedBy == callerID || sess.DurationMinutes < 1 || sess.DurationMinutes > s.breakGlassMaxMinutes {
 			continue
 		}
-		var resource string
-		switch {
-		case sess.BreakGlass:
-			// nothing can be approved while the platform grants nothing, nor for longer
-			// than it grants today
-			if sess.DurationMinutes < 1 || sess.DurationMinutes > s.breakGlassMaxMinutes {
-				continue
-			}
-			resource = BreakGlassApproveResourcePrefix + sess.PrivilegedAccountID
-		case sess.ApprovalRequired:
-			resource = SessionApproveResourcePrefix + sess.PrivilegedAccountID // ADR-0067
-		default:
-			continue
-		}
+		resource := BreakGlassApproveResourcePrefix + sess.PrivilegedAccountID
 		allowed, known := authority[resource]
 		if !known {
 			allowed, _, err = s.authz.CheckAccess(ctx, actorRoles, resource, "session:approve")
 			if err != nil {
-				return nil, 0, false, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
+				return nil, 0, false, fmt.Errorf("%w (asking Authorization for break-glass: %v)", domain.ErrUnavailable, err)
 			}
 			authority[resource] = allowed
 		}
@@ -1046,11 +1069,33 @@ func (s *SessionBrokerService) ListPendingApprovals(ctx context.Context, callerI
 			visible = append(visible, sess)
 		}
 	}
-
+	for _, request := range workflowPage.Items {
+		if request.ApproverUserID != callerID || request.RequesterUserID == callerID || request.Status != domain.WorkflowApprovalPending {
+			return nil, 0, false, fmt.Errorf("%w: Workflow returned an inconsistent approval assignment", domain.ErrUnavailable)
+		}
+		sess, getErr := s.sessions.Get(ctx, request.ResourceID)
+		if getErr != nil {
+			return nil, 0, false, fmt.Errorf("%w: resolving a Workflow approval session: %v", domain.ErrUnavailable, getErr)
+		}
+		if sess.Status != domain.StatusPendingApproval || sess.BreakGlass || !sess.ApprovalRequired || sess.RequestedBy != request.RequesterUserID || sess.PrivilegedAccountID != request.AccountID || sess.Ticket != request.TicketReference || !sess.ExpiresAt.After(s.clock()) {
+			return nil, 0, false, fmt.Errorf("%w: Workflow approval and Session Broker state disagree", domain.ErrUnavailable)
+		}
+		visible = append(visible, sess)
+	}
+	sort.Slice(visible, func(i, j int) bool {
+		if !visible[i].ExpiresAt.Equal(visible[j].ExpiresAt) {
+			return visible[i].ExpiresAt.Before(visible[j].ExpiresAt)
+		}
+		return visible[i].ID < visible[j].ID
+	})
+	truncated = breakGlassMore || workflowPage.Truncated || workflowPage.TotalItems > len(workflowPage.Items) || len(visible) > MaxPendingScanned
+	if len(visible) > MaxPendingScanned {
+		visible = visible[:MaxPendingScanned]
+	}
 	totalItems = len(visible)
 	start := (page - 1) * pageSize
 	if start >= len(visible) {
-		return items, totalItems, more, nil
+		return items, totalItems, truncated, nil
 	}
 	end := start + pageSize
 	if end > len(visible) {
@@ -1062,7 +1107,7 @@ func (s *SessionBrokerService) ListPendingApprovals(ctx context.Context, callerI
 			return nil, 0, false, fmt.Errorf("%w (recording the listing of %s: %v)", domain.ErrUnavailable, sess.ID, err)
 		}
 	}
-	return served, totalItems, more, nil
+	return served, totalItems, truncated, nil
 }
 
 // AuditActionListed is the audit action of a request served in a listing of the requests

@@ -1,0 +1,25 @@
+syntax = "proto3";
+package openbastion.authentication.v1;
+
+import "common/v1/common.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/authentication/v1;authenticationv1";
+
+// UserDirectory exposes only the current authorization context of one identity
+// to the Workflow Service. It never returns profile or credential material.
+// Transport HTTP/JSON under mTLS (ADR-0050), not gRPC.
+service UserDirectory {
+  rpc GetAuthorizationContext(GetAuthorizationContextRequest) returns (UserAuthorizationContext);
+}
+
+message GetAuthorizationContextRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string user_id = 2;
+}
+
+message UserAuthorizationContext {
+  string user_id = 1;
+  bool exists = 2;
+  bool active = 3; // Authentication owns this; derived from disabled_at IS NULL
+  repeated string roles = 4; // current roles; empty when absent/disabled; used only for CheckAccess
+}

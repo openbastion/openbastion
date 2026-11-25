@@ -90,6 +90,7 @@ func TestCapabilities_AsksForTheVerifiedRolesAndAnswersEachName(t *testing.T) {
 		"accounts.pin": false, "accounts.approval": false, "accounts.screenProfile": false, "accounts.kerberos": false, "policies.create": false, "sessions.create": false,
 		"sessions.breakglass": false, "sessions.approve": true, "sessions.read": false, "sessions.terminate": false,
 		"secrets.inject": false, "secrets.paste": false, "recordings.read": false, "audit.secretInjections": false,
+		"approvalHierarchy.read": false, "approvalHierarchy.manage": false, "approvalHierarchy.reports": false,
 	}
 	if len(got.Capabilities) != len(want) {
 		t.Fatalf("capabilities %v, want the %d names of the catalogue", got.Capabilities, len(want))
@@ -104,9 +105,33 @@ func TestCapabilities_AsksForTheVerifiedRolesAndAnswersEachName(t *testing.T) {
 	for _, q := range authz.queries {
 		asked[q["resource"].(string)+" "+q["action"].(string)] = true
 	}
-	for _, q := range []string{"vault:account-admin:* vault:account:list", "authz:policy-admin authz:policy:create", "recording:session: recording:session:read", "audit:secret-injections:all audit:secret-injections:read"} {
+	for _, q := range []string{"vault:account-admin:* vault:account:list", "authz:policy-admin authz:policy:create", "recording:session: recording:session:read", "audit:secret-injections:all audit:secret-injections:read", "approval-hierarchy:user: approval-hierarchy:read", "approval-hierarchy:all approval-hierarchy:read", "approval-hierarchy:user: approval-hierarchy:manage", "approval-hierarchy:all approval-hierarchy:manage", "approval-hierarchy:reports: approval-hierarchy:read", "approval-hierarchy:all approval-hierarchy:read"} {
 		if !asked[q] {
 			t.Fatalf("question %q not asked: %v", q, asked)
+		}
+	}
+}
+
+func TestCapabilities_GlobalHierarchyPermissionMakesHierarchyVisible(t *testing.T) {
+	authz := &capabilitiesAuthz{answer: func(q map[string]any) bool {
+		return q["resource"] == "approval-hierarchy:all" &&
+			(q["action"] == "approval-hierarchy:read" || q["action"] == "approval-hierarchy:manage")
+	}}
+	gw, done := capabilitiesGateway(t, authz)
+	defer done()
+	rec := getCapabilities(gw, http.MethodGet, "/auth/me/capabilities", "good-token")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("response %d %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Capabilities map[string]bool `json:"capabilities"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"approvalHierarchy.read", "approvalHierarchy.manage", "approvalHierarchy.reports"} {
+		if !got.Capabilities[name] {
+			t.Fatalf("global hierarchy permission did not enable %s: %v", name, got.Capabilities)
 		}
 	}
 }

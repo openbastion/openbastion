@@ -39,6 +39,11 @@ var capabilityCatalogue = []struct {
 	{"accounts.kerberos", []capabilityCheck{{"vault:account-admin:", "vault:account:kerberos", true}}},            // ADR-0100
 	// Authorization (requirePolicyAdmin).
 	{"policies.create", []capabilityCheck{{"authz:policy-admin", "authz:policy:create", false}}},
+	// ADR-0138 — the UI uses these only to expose relevant controls; every targeted route
+	// still checks the exact user or manager resource independently.
+	{"approvalHierarchy.read", []capabilityCheck{{"approval-hierarchy:user:", "approval-hierarchy:read", true}, {"approval-hierarchy:all", "approval-hierarchy:read", false}}},
+	{"approvalHierarchy.manage", []capabilityCheck{{"approval-hierarchy:user:", "approval-hierarchy:manage", true}, {"approval-hierarchy:all", "approval-hierarchy:manage", false}}},
+	{"approvalHierarchy.reports", []capabilityCheck{{"approval-hierarchy:reports:", "approval-hierarchy:read", true}, {"approval-hierarchy:all", "approval-hierarchy:read", false}}},
 	// Session Broker.
 	{"sessions.create", []capabilityCheck{{"vault:account:", "session:create", true}}},
 	{"sessions.breakglass", []capabilityCheck{{"breakglass:account:", "session:breakglass", true}}},

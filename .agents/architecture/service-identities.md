@@ -2,29 +2,41 @@
 
 Le graphe d'appels entre services. La source de vérité des appelants autorisés est le `internal/interfaces/callers.go` de chaque service ; ce schéma la résume.
 
-Les noms de service sont ceux des SAN URI `spiffe://<domaine>/<service>` : `api-gateway`, `authentication`, `authorization`, `session-broker`, `ssh-proxy`, `password-vault`, `audit-service`, `command-recorder`, `video-recorder`, `seaweedfs`, plus `admin-cli` (outillage opérateur).
+Les noms de service sont ceux des SAN URI `spiffe://<domaine>/<service>` : `api-gateway`, `authentication`, `authorization`, `session-broker`, `workflow-service`, `ssh-proxy`, `password-vault`, `audit-service`, `command-recorder`, `video-recorder`, `seaweedfs`, `rdp-vnc-proxy` et `admin-cli`.
 
 ```
-utilisateur ──HTTP──► api-gateway ──► authentication   (login, verify)
-                          │──────► session-broker      (/sessions… : création, `GET /sessions?status=pending_approval` (seul statut servi), connect, approve, reject, `secret-injection-step-up`, `secret-injection` — liste blanche ; l'identité de l'appelant est celle du jeton, la requête de liste et les corps d'action sont reconstruits)
-                          │──────► password-vault      (administration des comptes, rotation, épinglage de la clé d'hôte)
-                          │──────► authorization       (création de politiques ; `POST /authz/v1/capabilities`, capacités Admin UI, décision des injections — ADR-0131, et `POST /authz/v1/check-access` pour les lectures/acquittements d’alertes sous ABAC — ADR-0117/0122)
-                          ├──────► audit-service        (lectures et acquittements d’alertes sous identité mTLS Gateway, après ABAC)
-                          ├──────► command-recorder    (lecture d'un replay SSH)
-                          └──────► video-recorder      (lecture d'un replay vidéo)
-session-broker ──mTLS──► authentication (client MFA action-step-up épinglé sur le SAN `authentication`, ADR-0097) · authorization (check-access) · password-vault (authorize-scope, métadonnées de compte)
-               ──► audit-service (emit-event)   · ssh-proxy (establish-session)
-               ──► webhook de notification (BREAKGLASS_NOTIFY_URL, HORS maillage mTLS, au mieux, jamais un contrôle — ADR-0012 ; signé si BREAKGLASS_NOTIFY_SECRET — ADR-0013)
-ssh-proxy ──► password-vault (fetch-credential : le secret, l'adresse et la clé d'hôte épinglée — ADR-0039) · audit-service · command-recorder (écriture des commandes)
-password-vault, command-recorder ──► authorization (check-access)
-command-recorder, video-recorder ──► audit-service (recording.read, avant de servir)
-video-recorder ──► authorization (recording:session:read)
-rdp-vnc-proxy ──► video-recorder (flux gRPC acquitté ; identité réservée, proxy pas encore implémenté)
-video-recorder ──mTLS──► seaweedfs (S3-compatible, profil Compose `recording`)
-admin-cli ──► authentication (POST /auth/v1/users) · audit-service (GET /audit/v1/verify-chain)
+utilisateur ──HTTP──► api-gateway ──► authentication (login, verify)
+                          ├──────► workflow-service (gestion hiérarchie ; ADR-0138)
+                          ├──────► session-broker (sessions et décisions)
+                          ├──────► password-vault (comptes, rotation, épinglage)
+                          ├──────► authorization (politiques et contrôles d'accès)
+                          ├──────► audit-service (lectures et acquittements autorisés)
+                          ├──────► command-recorder (replay SSH)
+                          └──────► video-recorder (replay vidéo)
+workflow-service ──mTLS──► authentication (authorization-context, statut actif et rôles courants)
+                  ├──────► authorization (check-access)
+                  └──────► audit-service (événements signés)
+session-broker ──mTLS──► workflow-service (création idempotente, liste et décisions d’approbation)
+               ├──────► authentication (MFA action-step-up)
+               ├──────► authorization (check-access)
+               ├──────► password-vault (authorize-scope)
+               ├──────► audit-service (emit-event)
+               └──────► ssh-proxy (establish-session)
+ssh-proxy ──► password-vault (fetch-credential) · audit-service · command-recorder
+password-vault, command-recorder ──► authorization
+command-recorder, video-recorder ──► audit-service
+video-recorder ──► authorization · seaweedfs (S3/mTLS)
+rdp-vnc-proxy ──► video-recorder (flux gRPC)
+admin-cli ──► authentication (création utilisateur) · audit-service (vérification chaîne)
 ```
 
-Ports par défaut : gateway 8080, vault 8081, audit 8082, authorization 8083, broker 8084, ssh-proxy 8085 (API) + 2222 (SSH), authentication 8086, Command Recorder 8087, Video Recorder HTTP 8088/gRPC 8089, SeaweedFS S3/TLS 8333. La source de vérité des appelants autorisés est le `callers.go` de chaque service, pas ce schéma.
+Ports par défaut : Gateway 8080, Vault 8081, Audit 8082, Authorization 8083, Broker 8084, SSH Proxy 8085 (API) + 2222 (SSH), Authentication 8086, Command Recorder 8087, Video Recorder HTTP 8088/gRPC 8089, Workflow Service 8091, SeaweedFS S3/TLS 8333. La source de vérité des appelants autorisés est `callers.go`, pas ce schéma.
 
-- `session-broker` → `ssh-proxy`: `POST /internal/v1/inject-vault-secret` via mTLS, action limitée à l'injection d'un scope Vault à usage unique sur une session existante. `ssh-proxy` seul appelle ensuite `password-vault` pour obtenir le credential. Aucun secret ne transite par Broker/Gateway (ADR-0097).
-- `session-broker` → `rdp-vnc-proxy`: `POST /internal/v1/authorize-paste` via mTLS (ADR-0133) : un jeton de saisie à usage unique (32 octets, 60 s au plus) pour une session écran vivante, après le second facteur de l'opérateur. Aucun texte ne passe par cette route : le mot de passe arrive chiffré pour le proxy par le flux d'écran (`InputPaste`), avec ce jeton.
+## Workflow Service (ADR-0138)
+
+- Authentication : seul `workflow-service` lit `GET /auth/v1/internal/users/{user_id}/authorization-context`.
+- Authorization : `workflow-service` appelle `POST /authz/v1/check-access` avec les rôles actuels retournés par Authentication.
+- Audit : `workflow-service` émet les événements préalables et vide son outbox post-commit via `POST /audit/v1/emit-event`.
+- Gateway : seul `api-gateway` appelle les routes internes de gestion de hiérarchie.
+- Session Broker : seul `session-broker` appelle les routes internes de création idempotente, de lecture de file et de décision d'approbation ; le dispatch est alimenté par son outbox durable.
+- Aucun accès SQL inter-service ; chaque service garde sa propre base.

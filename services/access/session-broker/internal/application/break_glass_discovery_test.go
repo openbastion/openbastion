@@ -177,7 +177,7 @@ func TestListPending_FollowsTodaysRules_NotTheDayOfTheRequest(t *testing.T) {
 	// The limit comes down under what was asked: approving it would be refused, so it
 	// is not offered. (A request that records no duration is never offered either.)
 	lower := application.NewSessionBrokerService(f.store, f.authz, f.vault, f.audit, &fakeAccountLookup{}, f.proxy).
-		WithBreakGlass(10).WithClock(f.clock.Now)
+		WithBreakGlass(10).WithClock(f.clock.Now).WithWorkflowApprovalClient(f.workflow)
 	if items, _, _, err := lower.ListPendingApprovals(context.Background(), approver, []string{"lead"}, 1, 20); err != nil || len(items) != 0 {
 		t.Fatalf("limit lowered to 10: items=%v err=%v", ids(items), err)
 	}
@@ -185,7 +185,7 @@ func TestListPending_FollowsTodaysRules_NotTheDayOfTheRequest(t *testing.T) {
 	// And with break-glass switched off, nothing can be approved, so nothing is listed
 	// — and nobody is asked anything.
 	off := application.NewSessionBrokerService(f.store, f.authz, f.vault, f.audit, &fakeAccountLookup{}, f.proxy).
-		WithBreakGlass(0).WithClock(f.clock.Now)
+		WithBreakGlass(0).WithClock(f.clock.Now).WithWorkflowApprovalClient(f.workflow)
 	before := len(f.authz.asked)
 	if items, _, _, err := off.ListPendingApprovals(context.Background(), approver, []string{"lead"}, 1, 20); err != nil || len(items) != 0 {
 		t.Fatalf("switched off: items=%v err=%v", ids(items), err)
