@@ -24,6 +24,7 @@ type Credential struct {
 	TargetHost           string
 	HostKey              string
 	TargetUser           string
+	TargetDatabase       string
 	TLSCertificateSHA256 string
 	TargetDomain         string
 	// KerberosRealm and KerberosKDCs, set by the Vault on an RDP account, make the session
@@ -39,6 +40,7 @@ type Fetched struct {
 	TargetHost           string
 	HostKey              string
 	TargetUser           string
+	TargetDatabase       string
 	TLSCertificateSHA256 string
 	TargetDomain         string
 	KerberosRealm        string
@@ -68,7 +70,8 @@ func (c *Credential) Purge() {
 	}
 	securemem.Zero(c.material)
 	c.material = nil
-	c.TargetUser = ""
+	c.TargetHost, c.HostKey = "", ""
+	c.TargetUser, c.TargetDatabase = "", ""
 	c.TLSCertificateSHA256 = ""
 	c.TargetDomain = ""
 	c.KerberosRealm, c.KerberosKDCs = "", nil
@@ -114,7 +117,8 @@ func (f *CredentialFetcher) Fetch(ctx context.Context, scopeToken string) (*Cred
 	}
 	c := newCredential(got.Type, got.Material)
 	c.TargetHost, c.HostKey = got.TargetHost, got.HostKey
-	c.TargetUser, c.TLSCertificateSHA256, c.TargetDomain = got.TargetUser, got.TLSCertificateSHA256, got.TargetDomain
+	c.TargetUser, c.TargetDatabase = got.TargetUser, got.TargetDatabase
+	c.TLSCertificateSHA256, c.TargetDomain = got.TLSCertificateSHA256, got.TargetDomain
 	c.KerberosRealm, c.KerberosKDCs = got.KerberosRealm, append([]string(nil), got.KerberosKDCs...)
 	return c, nil
 }

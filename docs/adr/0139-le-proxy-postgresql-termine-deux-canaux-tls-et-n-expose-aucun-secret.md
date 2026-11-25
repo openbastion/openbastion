@@ -1,6 +1,6 @@
 # ADR-0139 — Le proxy PostgreSQL termine deux canaux TLS et n’expose aucun secret cible
 
-**Statut** `Proposé` · 2026-11-25 · cadrage initial du Database Proxy, PostgreSQL en premier moteur
+**Statut** `Accepté` · 2026-11-25 · cadrage initial du Database Proxy, PostgreSQL en premier moteur
 
 ## Contexte
 
@@ -123,4 +123,14 @@ Un proxy qui ne ferait que relayer TCP/TLS de bout en bout ne pourrait ni contr�
 - Le test de bout en bout utilise des processus réels, PostgreSQL 16, mTLS interne et une cible TLS vérifiée ; il couvre les redémarrages, pannes, courses, limites mémoire et `-race`.
 - Le threat model STRIDE couvre au minimum usurpation de ticket, rejeu, SSRF/DNS rebinding, downgrade TLS, injection de paramètres Startup, désynchronisation de flux, épuisement mémoire/connexions, perte d'acquittement, révocation concurrente et compromission du proxy.
 
-**Points à trancher avant le statut `Accepté` :** compatibilité exacte des drivers PostgreSQL visés avec l'authentification ticket, prise en charge de CancelRequest, mécanismes d'authentification upstream de la première version, limites de connexion par cible et contrat d'événement du Command Recorder. Ces points ne doivent pas être implicitement considérés comme déjà implémentés.
+### Profil d'interopérabilité du premier incrément accepté
+
+Les choix ci-dessous ferment le périmètre initial sans prétendre couvrir toutes les extensions PostgreSQL :
+
+1. **Drivers client.** Le proxy émet `AuthenticationCleartextPassword` uniquement après TLS vérifié ; le client standard présente le ticket dans un `PasswordMessage`. Le ticket est donc compatible avec les drivers PostgreSQL v3 qui prennent en charge l'authentification `password` standard. Le mot de passe de la cible n'est jamais demandé au client. Le test de compatibilité de référence utilise le protocole libpq ; tout driver non conforme est hors support jusqu'à un test dédié.
+2. **CancelRequest.** Le proxy émet des clés `BackendKeyData` aléatoires et opaques, conserve leur correspondance avec les clés amont et traduit les `CancelRequest` sans révéler le PID ni le secret PostgreSQL. Le paquet `CancelRequest` est l'exception protocolaire PostgreSQL : il arrive sur une nouvelle connexion TCP sans négociation TLS. Il ne transporte que cette capacité aléatoire, liée à l'adresse IP du pair client et à une session active ; aucune donnée SQL ni aucun secret de compte n'y transite.
+3. **Authentification amont.** Le premier incrément accepte uniquement `SCRAM-SHA-256` vers la cible. MD5, `cleartext`, GSS et les mécanismes inconnus sont refusés sans rétrogradation. Les comptes de test et la matrice d'interopérabilité doivent utiliser PostgreSQL 16 configuré en SCRAM-SHA-256. Tant que le proxy ne fournit pas une préparation SASLprep Unicode complète, les mots de passe amont doivent être en ASCII imprimable ; les autres sont refusés sans repli.
+4. **Limites initiales.** Défauts stricts : 256 connexions actives par instance, 32 par cible, 8 par acteur et 1 par session. Les limites sont configurables dans des bornes finies ; zéro, valeur absente invalide ou dépassement ne signifie jamais « illimité ».
+5. **Événement Command Recorder.** Le contrat distingue `started` et `completed`, identifiés par un `operation_id` et une séquence monotone par session. `started` est acquitté durablement avant de transmettre l'opération à la cible ; `completed` est acquitté avant de transmettre au client la fin et les résultats de l'opération. L'événement ne contient que le tag de commande, une empreinte HMAC par session, la durée, le nombre de lignes, l'état transactionnel et le SQLSTATE. SQL brut, Bind, COPY et résultats ne sont jamais persistés. COPY est refusé dans le premier incrément.
+
+Ces choix constituent le profil de compatibilité initial. Toute extension (autre mécanisme amont, capture COPY ou nouveau mode d'authentification client) exige des tests d'interopérabilité et, si elle modifie les garanties, un ADR complémentaire.
