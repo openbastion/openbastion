@@ -527,7 +527,7 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			continue
 		}
 		if control&^(rdpOrderStandard|rdpOrderTypeChange) != 0 {
-			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			return RDPBitmapUpdate{}, initialState, fmt.Errorf("primary order control flags=%#02x type=%#02x: %w", control, state.orderType, ErrMCSConnection)
 		}
 		var left, top, width, height int32
 		var red, green, blue byte
@@ -551,7 +551,11 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			data = data[11:]
 		case rdpOrderScrBlt:
 			if len(data) < 14 || data[0] != rdpScrBltFieldMask {
-				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				fieldFlags := byte(0)
+				if len(data) > 0 {
+					fieldFlags = data[0]
+				}
+				return RDPBitmapUpdate{}, initialState, fmt.Errorf("ScrBlt field header: remaining=%d flags=%#02x: %w", len(data), fieldFlags, ErrMCSConnection)
 			}
 			data = data[1:]
 			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
@@ -559,7 +563,7 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
 			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
 			if data[8] != rdpScrBltSrcCopy {
-				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				return RDPBitmapUpdate{}, initialState, fmt.Errorf("ScrBlt ROP=%#02x, want SRCCOPY: %w", data[8], ErrMCSConnection)
 			}
 			sourceX = int32(int16(binary.LittleEndian.Uint16(data[9:11])))
 			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
