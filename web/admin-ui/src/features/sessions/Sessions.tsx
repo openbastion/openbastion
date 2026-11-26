@@ -18,6 +18,7 @@ import { RecordingPanel } from "../audit/Recording";
 import { useRoutedView } from "../../shared/useRoutedView";
 import { useAppTranslation } from "../../shared/i18n";
 import { useCapabilities } from "../../shared/capabilities";
+import { SimulatedSessions } from "../mockup/SimulatedSessions";
 import { GatedButton } from "../../shared/ui/GatedButton";
 
 export type View = "live" | "history" | "recordings" | "alerts";
@@ -381,6 +382,7 @@ export function Sessions({
               load();
             }} onCancel={() => setRequestFormOpen(false)} />
           </Modal>
+          <SimulatedSessions />
         </TabsContent>
         <TabsContent value="history"><SessionHistory /></TabsContent>
         <TabsContent value="recordings">
