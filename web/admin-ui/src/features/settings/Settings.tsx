@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRoutedView } from "../../shared/useRoutedView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { Button } from "../../shared/ui/Button";
@@ -16,9 +16,13 @@ export type SettingsTab = "general" | "security" | "identities" | "integrations"
 // the deployment in each of them. The public API exposes no settings resource: every value here
 // is declared at deployment, so the header carries the reference's Save action disabled and each
 // panel says where its value comes from rather than offering a write it cannot make.
-export function Settings() {
+export function Settings({ view, onViewChange }: {
+  // ADR-0137: when the application gives them, the tab is the address (`/settings/<view>`).
+  view?: SettingsTab;
+  onViewChange?: (view: SettingsTab) => void;
+} = {}) {
   const { t } = useAppTranslation();
-  const [tab, setTab] = useState<SettingsTab>("general");
+  const [tab, setTab] = useRoutedView<SettingsTab>("general", view, onViewChange);
 
   return (
     <AdminPage

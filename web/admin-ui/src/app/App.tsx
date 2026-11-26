@@ -14,10 +14,11 @@ import { Sessions } from "../features/sessions/Sessions";
 import type { View as AccountsView } from "../features/accounts/Accounts";
 import type { View as SessionsView } from "../features/sessions/Sessions";
 import type { View as AuditView } from "../features/audit/AuditCompliance";
+import type { SettingsTab } from "../features/settings/Settings";
 import { LegalNotice } from "../shared/LegalNotice";
 import { AppShell } from "./AppShell";
 import { Tab, routerBasename, tabAllowed, tabFromPath, tabPath, viewPath, destinations } from "./navigation";
-import { CapabilityGate, NotFound, ViewGate } from "./RouteStates";
+import { CapabilityGate, NotFound, RouteBoundary, ViewGate } from "./RouteStates";
 import type { TokenClaims } from "../shared/api";
 import { readOperatorPreferences } from "../shared/operatorPreferences";
 import { Capabilities, CapabilitiesContext, capabilitiesFrom, parseCapabilities } from "../shared/capabilities";
@@ -131,7 +132,7 @@ function SignedInRoutes({ who, capabilities, onSignOut }: { who: TokenClaims | n
     infrastructure: () => <Infrastructure onNavigate={goTo} />,
     security: (view) => <AuditCompliance onNavigate={goTo} view={view as AuditView} onViewChange={toView("security")} />,
     posture: () => <SecurityCenter />,
-    settings: () => <Settings />,
+    settings: (view) => <Settings view={view as SettingsTab} onViewChange={toView("settings")} />,
   };
   // The stored default screen opens at "/"; one the caller may not see falls back to the overview.
   const defaultTab = readOperatorPreferences().defaultTab;
@@ -155,18 +156,18 @@ function SignedInRoutes({ who, capabilities, onSignOut }: { who: TokenClaims | n
               <Route
                 key={`${destination.id}/view`}
                 path={`${destination.path}/:view`}
-                element={<ViewRoute tab={destination.id} render={screens[destination.id]} />}
+                element={<RouteBoundary routeKey={pathname}><ViewRoute tab={destination.id} render={screens[destination.id]} /></RouteBoundary>}
               />,
             ]
           ) : (
             <Route
               key={destination.id}
               path={destination.path}
-              element={<CapabilityGate tab={destination.id}>{screens[destination.id]()}</CapabilityGate>}
+              element={<RouteBoundary routeKey={pathname}><CapabilityGate tab={destination.id}>{screens[destination.id]()}</CapabilityGate></RouteBoundary>}
             />
           ),
         )}
-        <Route path="*" element={<NotFound />} />
+        <Route path="*" element={<RouteBoundary routeKey={pathname}><NotFound /></RouteBoundary>} />
       </Routes>
     </AppShell>
   );
