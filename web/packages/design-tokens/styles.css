@@ -5590,3 +5590,37 @@ main.login {
 /* Required markers are visual only; the required input attribute carries the semantics. */
 .ob-form-field__label-row { display: flex; align-items: baseline; gap: .2rem; }
 .ob-form-field__required-marker { color: var(--ob-color-status-danger); font-size: .9em; line-height: 1; }
+
+/* ==========================================================================
+   09. MOCKUP ELEMENTS — Access, Sessions and Audit views
+   Elements taken from the admin UI mockup (monospace technical data, accent-coloured
+   identifiers, mono table headers, row hover, rounded technical pills) expressed with the
+   existing light theme tokens. No palette change: colours stay the semantic roles above.
+   ========================================================================== */
+.account-table, .session-history-table, .audit-journal-table, .sessions-live-workspace {
+  --ob-mock-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.account-table thead th, .session-history-table thead th, .audit-journal-table thead th {
+  font-family: var(--ob-mock-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.account-table tbody tr, .session-history-table tbody tr, .audit-journal-table tbody tr {
+  transition: background-color 120ms ease;
+}
+.account-table tbody tr:hover, .session-history-table tbody tr:hover, .audit-journal-table tbody tr:hover {
+  background: var(--ob-color-bg-surface-muted);
+}
+.account-table code, .session-history-table code, .audit-journal-table code,
+.sessions-live-item-meta code, .sessions-live-detail-heading code, .sessions-live-item-account {
+  font-family: var(--ob-mock-mono);
+  font-weight: 600;
+  color: var(--ob-color-accent-ink);
+}
+.sessions-live-item-account, .sessions-live-item-meta time { font-family: var(--ob-mock-mono); }
+.sessions-live-item-meta code { font-size: 0.66rem; }
+.sessions-live-item .reference-pill, .session-history-table .ob-badge, .audit-journal-table .ob-badge {
+  font-family: var(--ob-mock-mono);
+  border-radius: 0.35rem;
+}
