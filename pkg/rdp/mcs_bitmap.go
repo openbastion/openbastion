@@ -434,9 +434,15 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 	return parseRDPOrdersUpdateDataAt(data, desktopWidth, desktopHeight, 32, state)
 }
 
-func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessionBPP uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
-	var result RDPBitmapUpdate
+func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessionBPP uint16, state rdpPrimaryOrderState) (result RDPBitmapUpdate, nextState rdpPrimaryOrderState, err error) {
 	initialState := state
+	currentOrderIndex := -1
+	currentOrderType := byte(0)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("primary order index=%d type=%#02x: %w", currentOrderIndex, currentOrderType, err)
+		}
+	}()
 	if sessionBPP != 15 && sessionBPP != 16 && sessionBPP != 32 {
 		return result, initialState, ErrMCSConnection
 	}
@@ -453,6 +459,8 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 	result.Rectangles = make([]RDPBitmapRectangle, 0, orderCount)
 	var totalPixels uint64
 	for i := 0; i < orderCount; i++ {
+		currentOrderIndex = i
+		currentOrderType = state.orderType
 		if len(data) < 1 {
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
@@ -483,6 +491,7 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			state.orderType = rdpOrderPatBlt // Initial primary order type per MS-RDPEGDI.
 			state.hasOrderType = true
 		}
+		currentOrderType = state.orderType
 		// DstBlt is color-depth independent. All other currently supported order parsers
 		// use 32-bpp color/cache semantics and are therefore refused at 15/16 bpp.
 		if sessionBPP != 32 && state.orderType != rdpOrderDstBlt {
