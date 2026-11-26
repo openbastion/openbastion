@@ -3,8 +3,7 @@ import { useCapabilities } from "../../shared/capabilities";
 import { ApiError, SecretInjectionReconciliation as Result, SecretInjectionOutcome } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { useAppTranslation } from "../../shared/i18n";
-import { Badge } from "../../shared/ui/Badge";
-import { Button } from "../../shared/ui/Button";
+import { Badge, Button } from "@openbastion/ui";
 
 const limit = 100;
 

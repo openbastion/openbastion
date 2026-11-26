@@ -8,19 +8,19 @@ test.describe.configure({ mode: "serial" });
 test("a deep link signs in and then lands on the requested address, not the default screen", async ({ browser, baseURL }) => {
   const basePath = new URL(baseURL!).pathname;
   const page = await signIn(browser, baseURL!, "operator", "sessions");
-  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions");
+  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions/live");
   await expect(page.getByRole("navigation", { name: "Sections" }).locator('[aria-current="page"]')).toHaveAccessibleName("Sessions");
 
   // Back/Forward follow the address.
   await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Infrastructure", exact: true }).click();
   await expect.poll(() => pathnameOf(page, basePath)).toBe("/infrastructure");
   await page.goBack();
-  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions");
+  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions/live");
   await page.goForward();
   await expect.poll(() => pathnameOf(page, basePath)).toBe("/infrastructure");
 
   // Every destination is its own address, taken from navigation.ts.
-  for (const [label, path] of [["Vue d’ensemble", "/overview"], ["Accès privilégiés", "/access"], ["Audit & conformité", "/audit"], ["Sécurité", "/security"], ["Paramètres", "/settings"]]) {
+  for (const [label, path] of [["Vue d’ensemble", "/overview"], ["Accès privilégiés", "/access"], ["Audit & conformité", "/audit/journal"], ["Sécurité", "/security"], ["Paramètres", "/settings"]]) {
     await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: label, exact: true }).click();
     await expect.poll(() => pathnameOf(page, basePath)).toBe(path);
   }

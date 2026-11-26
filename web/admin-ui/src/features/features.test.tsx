@@ -27,7 +27,7 @@ describe("Accounts", () => {
     fireEvent.click(screen.getByText("Renouveler le secret"));
     expect(screen.getByRole("alertdialog").textContent).toContain("compte de réconciliation");
     expect(calls.some((call) => call.method === "POST" && call.path.endsWith("/rotate"))).toBe(false);
-    fireEvent.click(screen.getByText("Renouveler le secret", { selector: ".confirm-dialog button" }));
+    fireEvent.click(screen.getByText("Renouveler le secret", { selector: "[role=alertdialog] button" }));
     expect((await screen.findByRole("status")).textContent).toContain("Secret de acc_1 renouvelé sur la cible");
     expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts/acc_1/rotate")).toBe(true);
   });
@@ -91,7 +91,7 @@ describe("Accounts", () => {
     signedIn(api, <Accounts />);
     openAccountsTab();
     fireEvent.click(await screen.findByText("Renouveler le secret"));
-    fireEvent.click(screen.getByText("Renouveler le secret", { selector: ".confirm-dialog button" }));
+    fireEvent.click(screen.getByText("Renouveler le secret", { selector: "[role=alertdialog] button" }));
     expect((await screen.findByRole("alert")).textContent).toContain("409 — the account has no usable reconciliation account");
     expect(screen.getByRole("alertdialog")).toBeTruthy();
   });

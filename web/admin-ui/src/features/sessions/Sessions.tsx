@@ -5,11 +5,9 @@ import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { ScreenViewer } from "../screen/ScreenViewer";
 import { AttachedScreen, SessionDetail } from "./SessionDetail";
-import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
-import { Button } from "../../shared/ui/Button";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { Badge, Form, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { AppConfirmDialog, Badge, Button, Form, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { Download, Search } from "@openbastion/icons";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
 import { Modal } from "../../shared/ui/Modal";
@@ -17,11 +15,12 @@ import { SessionHistory } from "./SessionHistory";
 import { SessionRecordings } from "./SessionRecordings";
 import { SessionAlerts } from "./SessionAlerts";
 import { RecordingPanel } from "../audit/Recording";
+import { useRoutedView } from "../../shared/useRoutedView";
 import { useAppTranslation } from "../../shared/i18n";
 import { useCapabilities } from "../../shared/capabilities";
 import { GatedButton } from "../../shared/ui/GatedButton";
 
-type View = "live" | "history" | "recordings" | "alerts";
+export type View = "live" | "history" | "recordings" | "alerts";
 
 function formatExpiry(value: string, locale: string): string {
   const date = new Date(value);
@@ -38,12 +37,17 @@ export function Sessions({
   requestedSessionId,
   onSessionLookupComplete,
   initialView = "live",
+  view: routedView,
+  onViewChange,
   onOpenRecording,
 }: {
   requestedSessionId?: string | null;
   onSessionLookupComplete?: () => void;
   onOpenRecording?: (sessionId: string) => void;
   initialView?: View;
+  // ADR-0137: when the application gives them, the tab is the address (`/sessions/<view>`).
+  view?: View;
+  onViewChange?: (view: View) => void;
 } = {}) {
   const { t, i18n } = useAppTranslation();
   const { api, who } = useSignedIn();
@@ -59,7 +63,7 @@ export function Sessions({
   const { visible } = useCapabilities();
   // ADR-0131: the recordings tab is for those who may replay; the others stay on the live view.
   const recordingsShown = visible("recordings.read");
-  const [chosenView, setView] = useState<View>(initialView);
+  const [chosenView, setView] = useRoutedView<View>(initialView, routedView, onViewChange);
   const view: View = chosenView === "recordings" && !recordingsShown ? "live" : chosenView;
   const [requestFormOpen, setRequestFormOpen] = useState(false);
   // The recording screen lives in this page's "Enregistrements" tab: the library opens its
@@ -390,7 +394,9 @@ export function Sessions({
         <TabsContent value="alerts"><SessionAlerts onSummaryChange={setAlertSummary} /></TabsContent>
       </Tabs>
       {decision ? (
-        <ConfirmDialog
+        <AppConfirmDialog
+          cancelLabel={t("common.actions.cancel")}
+          workingLabel={t("common.actions.working")}
           title={
             decision.kind === "approve" ? t("sessions.confirm.approveTitle")
               : decision.kind === "reject" ? t("sessions.confirm.rejectTitle")

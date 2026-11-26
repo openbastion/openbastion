@@ -5664,3 +5664,12 @@ Validation de l'incrément 65 :
 - Tests TLS : Confirm Active annonce DstBlt, la session lit/rend l'ordre, l'état de champs persiste entre deux PDU, la réactivation réinitialise le cache, et `DSTCOPY` est consommé sans frame inchangée.
 - `gofmt` et `git diff --check` : **PASS**.
 - Les tests Windows Server 2019/2022 ne sont pas exécutés localement conformément à la consigne ; ils restent obligatoires dans la CI de la PR. Aucune interopérabilité Windows/RDS réelle n'est revendiquée avant ce résultat.
+
+## Incrément ADR-0137 — Accès, Sessions, Audit sur sous-routes
+
+- Les onglets de `/access` (`resources|accounts|policies|requests|hierarchy`), `/sessions` (`live|history|recordings|alerts`) et `/audit` (`journal|reports|evidence|retention`) sont des sous-routes déclarées dans `app/navigation.ts` (`views`, capacité par onglet). L'adresse nue redirige vers le premier onglet ; un onglet inconnu est un 404 (aucune destination courante) ; un onglet sans capacité est un 403 qui la nomme (`ViewGate`). Les écrans restent utilisables seuls (`useRoutedView` : état local sans `view`/`onViewChange`).
+- `ConfirmDialog` local supprimé : `AppConfirmDialog` de `@openbastion/ui` (Annuler/Travail en cours passés par l'appelant). Le composant restitue le focus à l'élément déclencheur à son démontage (Radix l'envoyait au bouton Annuler retiré).
+- `Button`, `Badge`, `InlineNotice` des trois vues viennent directement de `@openbastion/ui` (`Alert`).
+- Un onglet déclenche son changement à l'appui puis au focus : `toView` ne pousse qu'une entrée d'historique par adresse.
+- Tests : `web/admin-ui/e2e/adr-0137-{access,sessions,audit}.spec.ts` (Playwright, pile en marche, 1 connexion par spec, la Gateway limite les connexions : 5 puis 1/min). Vitest : 369 tests.
+- Pas encore fait : filtres en `searchParams`, sous-route `onboard`, `AppErrorBoundary` par route, migration de `GatedButton`/`Modal`/`AdminPage`.

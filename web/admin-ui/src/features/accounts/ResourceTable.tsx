@@ -1,8 +1,7 @@
 import { Account } from "../../shared/api";
-import { Badge } from "../../shared/ui/Badge";
-import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
 import { AccountStatePill, EnvironmentCell } from "./AccountTable";
+import { Badge, Button } from "@openbastion/ui";
 
 // The same accounts, read as access points: which target, over which protocol, under which
 // access rule, and whether that access point can actually open a session. Opening one hands the

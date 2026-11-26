@@ -3,9 +3,7 @@ import { RecordingSearchResult } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { useAppTranslation } from "../../shared/i18n";
 import { Notice } from "../../shared/Notice";
-import { Button } from "../../shared/ui/Button";
-import { Badge } from "../../shared/ui/Badge";
-import { Form, Input, Label } from "@openbastion/ui";
+import { Badge, Button, Form, Input, Label } from "@openbastion/ui";
 import { Search } from "@openbastion/icons";
 
 function datePart(date: Date): string {

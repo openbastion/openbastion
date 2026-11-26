@@ -1,8 +1,6 @@
 import { FormEvent, useState } from "react";
-import { Checkbox, FormField, Label, Select } from "@openbastion/ui";
+import { Alert, Button, Checkbox, FormField, Label, Select } from "@openbastion/ui";
 import { Account, ScreenChannel, ScreenColorDepth, ScreenProfile } from "../../shared/api";
-import { Button } from "../../shared/ui/Button";
-import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { Modal } from "../../shared/ui/Modal";
 import { useAppTranslation } from "../../shared/i18n";
 
@@ -104,8 +102,8 @@ export function ScreenProfileDialog({
           </Select>
         </FormField>
         <p className="ob-hint">{t("accounts.screenProfile.hint")}</p>
-        {problem ? <InlineNotice tone="warning">{t(`accounts.screenProfile.problems.${problem}`)}</InlineNotice> : null}
-        {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+        {problem ? <Alert tone="warning">{t(`accounts.screenProfile.problems.${problem}`)}</Alert> : null}
+        {error ? <Alert tone="danger">{error}</Alert> : null}
         <div className="ob-form-actions">
           <Button type="button" disabled={working} onClick={onCancel}>{t("common.actions.cancel")}</Button>
           {account.screenProfile ? (

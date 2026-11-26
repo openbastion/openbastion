@@ -41,7 +41,7 @@ async function moveTo(path: string) {
     window.history.pushState({}, "", to);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, [basePath.replace(/\/$/, "") + path]);
-  await expect.poll(pathname).toBe(path);
+  await expect.poll(() => pathname().startsWith(path)).toBe(true);
   await page.locator("body").click({ position: { x: 1, y: 1 } }); // focus out of any control
 }
 
@@ -67,7 +67,7 @@ for (const { digit, path, label } of destinations) {
     // Start elsewhere so that the shortcut is observed to move, not to stay.
     await moveTo(destinations[Number(digit) % destinations.length].path);
     await page.keyboard.press(`Alt+Shift+${digit}`);
-    await expect.poll(pathname).toBe(path);
+    await expect.poll(() => pathname().startsWith(path)).toBe(true);
     await expect(current()).toHaveAccessibleName(label);
   });
 }
@@ -89,7 +89,7 @@ test("destination shortcuts are suspended while the palette is open", async () =
 
 test("Back returns to the previous destination (the address is the state)", async () => {
   await page.keyboard.press("Alt+Shift+3");
-  await expect.poll(pathname).toBe("/sessions");
+  await expect.poll(pathname).toBe("/sessions/live");
   await page.goBack();
   await expect.poll(pathname).toBe("/overview");
 });

@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { FormField, Select } from "@openbastion/ui";
+import { Button, FormField, Select } from "@openbastion/ui";
 import { ScreenChannel, ScreenChoice, ScreenColorDepth, Session } from "../../shared/api";
-import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
 import { SecretInjection } from "./SecretInjection";
 import { GatedButton } from "../../shared/ui/GatedButton";
