@@ -266,7 +266,7 @@ export function Sessions({
         </TabsList>
 
         <TabsContent value="live">
-          <div className="sessions-live-workspace">
+          <div className={screen ? "sessions-live-workspace sessions-live-workspace--screen" : "sessions-live-workspace"}>
             <section className="sessions-live-queue" aria-labelledby="sessions-live-queue-title">
               <div className="sessions-live-panel-heading">
                 <div>

@@ -514,6 +514,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
     fireEvent.submit(form);
     fireEvent.click(await screen.findByText("Ouvrir l'écran"));
     await waitFor(() => expect(socketOpen).toHaveBeenCalledOnce());
+    expect(document.querySelector(".sessions-live-workspace")?.classList.contains("sessions-live-workspace--screen")).toBe(true);
     expect(calls.find((c) => c.path === "/sessions")?.body).toMatchObject({ protocol: "rdp" });
     vi.unstubAllGlobals();
   });
