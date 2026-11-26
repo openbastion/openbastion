@@ -65,6 +65,122 @@ func TestParseRDPFastPathBitmapUpdateRejectsUnsupportedForms(t *testing.T) {
 	}
 }
 
+func TestParseRDPFastPathOrdersUpdateUsesSharedOrderState(t *testing.T) {
+	cacheOrder := mcsTestRDPRev2BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap())
+	cacheData := mcsTestOrdersUpdateData(1, cacheOrder, 0, 0)
+	fastCacheData := append(append([]byte(nil), cacheData[2:4]...), cacheData[6:]...)
+	cacheUpdate, state, err := parseRDPFastPathOrdersUpdateAt(fastCacheData, 8, 8, 32, rdpPrimaryOrderState{})
+	if err != nil || len(cacheUpdate.Rectangles) != 0 || state.cache == nil || state.cache.bytes != 16 {
+		t.Fatalf("Fast-Path cache update=%+v state=%+v err=%v", cacheUpdate, state, err)
+	}
+	memBlt := mcsTestRDPMemBltOrder(0, 0, 3, 2, 2, 2, 0xcc, 0, 0)
+	memData := mcsTestOrdersUpdateData(1, memBlt, 0, 0)
+	fastMemData := append(append([]byte(nil), memData[2:4]...), memData[6:]...)
+	update, next, err := parseRDPFastPathOrdersUpdateAt(fastMemData, 8, 8, 32, state)
+	if err != nil || !next.memBltUsed || len(update.Rectangles) != 1 {
+		t.Fatalf("Fast-Path MemBlt update=%+v state=%+v err=%v", update, next, err)
+	}
+}
+
+func TestParseRDPFastPathOrdersUpdateRejectsMalformedCountsAndOrders(t *testing.T) {
+	valid := mcsTestFastPathOrdersPacket(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, rdpDstBltWhiteness), 0, 0))
+	_, _, body, err := splitRDPFastPathUpdate(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string][]byte{
+		"short count":     nil,
+		"zero count":      {0, 0},
+		"truncated order": {1, 0, rdpOrderStandard | rdpOrderTypeChange},
+		"trailing byte":   append(append([]byte(nil), body...), 0),
+	}
+	for name, data := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPFastPathOrdersUpdateAt(data, 8, 8, 32, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error=%v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
+func FuzzParseRDPFastPathOrdersUpdate(f *testing.F) {
+	f.Add(mcsTestFastPathOrdersPacket(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, rdpDstBltWhiteness), 0, 0))[3:])
+	f.Add([]byte{0, 0})
+	f.Add([]byte("not a fast-path orders update"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _, _ = parseRDPFastPathOrdersUpdateAt(data, 64, 64, 32, rdpPrimaryOrderState{})
+	})
+}
+
+func TestReadBitmapUpdateOverTLSAcceptsFastPathOrdersAndCarriesCache(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	cacheOrder := mcsTestRDPRev2BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap())
+	memBlt := mcsTestRDPMemBltOrder(0, 0, 3, 2, 2, 2, 0xcc, 0, 0)
+	cachePacket := mcsTestFastPathOrdersPacket(mcsTestOrdersUpdateData(1, cacheOrder, 0, 0))
+	memPacket := mcsTestFastPathOrdersPacket(mcsTestOrdersUpdateData(1, memBlt, 0, 0))
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+			acceptErr = writeFull(tlsConn, append(cachePacket, memPacket...))
+		}
+		serverResult <- acceptErr
+	}()
+	raw, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(raw, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		primaryOrdersEnabled: true, memBltEnabled: true,
+		mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
+	}
+	update, readErr := session.ReadBitmapUpdate(context.Background(), 2*time.Second)
+	if readErr != nil || len(update.Rectangles) != 1 || update.Rectangles[0].X != 3 || update.Rectangles[0].Y != 2 ||
+		session.primaryOrderState.cache == nil || !session.primaryOrderState.memBltUsed {
+		t.Fatalf("ReadBitmapUpdate=%+v state=%+v err=%v", update, session.primaryOrderState, readErr)
+	}
+	session.Close()
+	if serverErr := <-serverResult; serverErr != nil {
+		t.Fatal(serverErr)
+	}
+}
+
+func mcsTestFastPathOrdersPacket(slowPathOrderData []byte) []byte {
+	if len(slowPathOrderData) < 6 {
+		return nil
+	}
+	fastPathData := make([]byte, 2, 2+len(slowPathOrderData)-6)
+	copy(fastPathData, slowPathOrderData[2:4])
+	fastPathData = append(fastPathData, slowPathOrderData[6:]...)
+	update := []byte{rdpFastPathUpdateOrders, 0, 0}
+	binary.LittleEndian.PutUint16(update[1:3], uint16(len(fastPathData)))
+	update = append(update, fastPathData...)
+	packetLength := len(update) + 2
+	if packetLength < 128 {
+		return append([]byte{0, byte(packetLength)}, update...)
+	}
+	packetLength++
+	return append([]byte{0, 0x80 | byte(packetLength>>8), byte(packetLength)}, update...)
+}
+
 func TestReadRDPServerUpdatePacketSupportsBothFramings(t *testing.T) {
 	bitmapData := []byte{1, 0, 0, 0}
 	fastPath := mcsTestFastPathBitmapPacket(bitmapData)

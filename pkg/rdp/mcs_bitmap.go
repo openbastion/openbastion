@@ -1411,7 +1411,27 @@ func cropRDPBitmap(rgba []byte, width, destWidth, destHeight int) []byte {
 	return out
 }
 
+// parseRDPFastPathOrdersUpdateAt adapts the Fast-Path TS_FP_UPDATE_ORDERS body (numberOrders,
+// orderData) to the shared primary/secondary order decoder. Unlike slow-path TS_UPDATE_ORDERS,
+// Fast-Path has no two padding fields; the drawing-order grammar and per-share state are identical.
+func parseRDPFastPathOrdersUpdateAt(data []byte, desktopWidth, desktopHeight, sessionBPP uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
+	if len(data) < 2 {
+		return RDPBitmapUpdate{}, state, ErrMCSConnection
+	}
+	orderCount := binary.LittleEndian.Uint16(data[:2])
+	if orderCount == 0 || orderCount > maxRDPPrimaryOrders {
+		return RDPBitmapUpdate{}, state, ErrMCSConnection
+	}
+	slowPathData := make([]byte, 6+len(data)-2)
+	binary.LittleEndian.PutUint16(slowPathData[2:4], orderCount)
+	copy(slowPathData[6:], data[2:])
+	update, nextState, err := parseRDPOrdersUpdateDataAt(slowPathData, desktopWidth, desktopHeight, sessionBPP, state)
+	clear(slowPathData)
+	return update, nextState, err
+}
+
 const (
+	rdpFastPathUpdateOrders = byte(0)
 	rdpFastPathUpdateBitmap = byte(1)
 	maxRDPFastPathPacket    = 0x7fff
 )
@@ -1942,6 +1962,49 @@ readUpdate:
 				if rdpFastPathCodeIsIgnored(code) {
 					clear(packet)
 					goto readUpdate
+				}
+				if code == rdpFastPathUpdateOrders {
+					if !primaryOrdersEnabled {
+						clear(packet)
+						clear(data)
+						return RDPBitmapUpdate{}, ErrMCSConnection
+					}
+					var nextOrderState rdpPrimaryOrderState
+					update, nextOrderState, err = parseRDPFastPathOrdersUpdateAt(data, desktopWidth, desktopHeight, sessionBPP, orderState)
+					clear(packet)
+					clear(data)
+					if err != nil {
+						return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: Fast-Path orders: %v", ErrMCSConnection, err)
+					}
+					if nextOrderState.dstBltUsed && !dstBltEnabled ||
+						nextOrderState.memBltUsed && !memBltEnabled ||
+						nextOrderState.mem3BltUsed && !mem3BltEnabled ||
+						nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||
+						nextOrderState.scrBltUsed && !scrBltEnabled ||
+						nextOrderState.multiDstBltUsed && !multiDstBltEnabled ||
+						nextOrderState.multiPatBltUsed && !multiPatBltEnabled ||
+						nextOrderState.multiScrBltUsed && !multiScrBltEnabled ||
+						nextOrderState.lineToUsed && !lineToEnabled ||
+						nextOrderState.polylineUsed && !polylineEnabled ||
+						nextOrderState.polygonSCUsed && !polygonSCEnabled ||
+						nextOrderState.ellipseSCUsed && !ellipseSCEnabled ||
+						nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled || ctx.Err() != nil {
+						clearRDPBitmapCacheState(&nextOrderState)
+						return RDPBitmapUpdate{}, fmt.Errorf("%w: Fast-Path order was not negotiated or the read was cancelled", ErrMCSConnection)
+					}
+					s.mu.Lock()
+					if s.transport != transport {
+						s.mu.Unlock()
+						clearRDPBitmapCacheState(&nextOrderState)
+						return RDPBitmapUpdate{}, ErrMCSConnection
+					}
+					s.primaryOrderState = nextOrderState
+					orderState = nextOrderState
+					s.mu.Unlock()
+					if len(update.Rectangles) == 0 {
+						goto readUpdate
+					}
+					return update, nil
 				}
 				// TS_UPDATE_BITMAP_DATA starts with its updateType, as in the slow path.
 				if code != rdpFastPathUpdateBitmap || len(data) < 2 || binary.LittleEndian.Uint16(data[:2]) != rdpUpdateBitmap {
