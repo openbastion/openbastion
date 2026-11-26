@@ -33,7 +33,7 @@ test("a deep link signs in and then lands on the requested address, not the defa
   // A reload signs out (memory only) and keeps the requested address for after the next sign-in.
   await page.reload();
   await expect(page.getByLabel("Utilisateur")).toBeVisible();
-  expect(pathnameOf(page, basePath)).toBe("/settings");
+  expect(pathnameOf(page, basePath)).toBe("/settings/general");
   await page.close();
 });
 

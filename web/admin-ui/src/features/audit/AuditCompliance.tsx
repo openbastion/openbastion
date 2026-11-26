@@ -7,6 +7,7 @@ import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
 import { ReferencePager } from "../../shared/ui/ReferencePager";
 import { useRoutedView } from "../../shared/useRoutedView";
 import { useAppTranslation } from "../../shared/i18n";
+import { SimulatedAuditEvents } from "../mockup/SimulatedAuditEvents";
 import { Button, Input, Label, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { ChevronDown, Download, Search } from "@openbastion/icons";
 import { countByKind, findingsFor } from "./posture";
@@ -204,6 +205,7 @@ export function AuditCompliance({
             </div>
             <ReferencePager page={1} pageSize={pageSize} totalItems={0} noun={t("auditCompliance.journal.noun")} onPage={() => undefined} />
           </section>
+          <SimulatedAuditEvents />
         </TabsContent>
 
         <TabsContent value="reports">

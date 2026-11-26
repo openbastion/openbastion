@@ -31,3 +31,13 @@ test("the tabs are addresses, Back/Forward walk them and an unknown tab is a 404
     ],
   });
 });
+
+// ADR-0142 — les événements structurés de la maquette sont simulés ET signalés.
+test("the simulated structured events are marked and only live in the journal tab", async () => {
+  await page.getByRole("tab", { name: /Journal d’audit/ }).click();
+  const events = page.getByRole("region", { name: "Événements structurés" });
+  await expect(events.getByText("Données simulées")).toBeVisible();
+  await expect(events.getByText("session.started")).toBeVisible();
+  await page.getByRole("tab", { name: /Rapports/ }).click();
+  await expect(page.getByText("session.started")).toHaveCount(0);
+});

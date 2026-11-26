@@ -5624,3 +5624,31 @@ main.login {
   font-family: var(--ob-mock-mono);
   border-radius: 0.35rem;
 }
+
+/* Simulated mockup elements (ADR-0142): always marked, never mistaken for measured data. */
+.simulated-panel { margin-top: 1.1rem; padding: 1rem 1.25rem; background: var(--ob-color-bg-surface); border: 1px solid var(--ob-color-border-subtle); border-radius: 0.75rem; }
+.simulated-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
+.simulated-panel-heading h3 { margin: 0; color: var(--ob-color-text-primary); font-size: 0.9rem; }
+.simulated-panel-note { margin: 0.25rem 0 0.75rem; color: var(--ob-color-text-secondary); font-size: 0.72rem; }
+.simulated-panel-actions { display: flex; align-items: center; gap: 0.6rem; }
+.simulated-badge { border: 1px dashed var(--ob-color-status-warning); }
+.simulated-muted { color: var(--ob-color-text-secondary); }
+.simulated-origin { margin-left: 0.4rem; }
+.simulated-sessions-table .ob-table-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; }
+.simulated-event-list { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.simulated-event { padding: 0.7rem 0.9rem; background: var(--ob-color-bg-surface-muted); border: 1px solid var(--ob-color-border-subtle); border-radius: 0.6rem; font-family: var(--ob-mock-mono, ui-monospace, monospace); font-size: 0.72rem; }
+.simulated-event p { margin: 0.25rem 0 0; color: var(--ob-color-text-primary); }
+.simulated-event-top { display: flex; justify-content: space-between; gap: 0.5rem; }
+.simulated-event-top code { color: var(--ob-color-accent-ink); font-weight: 600; }
+.simulated-event-top time, .simulated-event-details { color: var(--ob-color-text-secondary); }
+.simulated-drawer { display: grid; align-content: start; gap: 0.8rem; }
+.simulated-stream { display: grid; place-items: center; min-height: 10rem; color: var(--ob-color-chrome-text); background: var(--ob-palette-navy-900); border-radius: 0.6rem; font-family: var(--ob-mock-mono, ui-monospace, monospace); font-size: 0.75rem; }
+.simulated-drawer-facts { display: grid; gap: 0.4rem; margin: 0; }
+.simulated-drawer-facts div { display: flex; justify-content: space-between; gap: 1rem; }
+.simulated-drawer-facts dt { color: var(--ob-color-text-secondary); }
+.simulated-drawer-facts dd { margin: 0; }
+.simulated-activity { margin: 0; padding-left: 1.1rem; font-size: 0.75rem; }
+.simulated-dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.route-error { max-width: 32rem; margin: 3rem auto; padding: 1.5rem; text-align: center; color: var(--ob-color-text-primary); background: var(--ob-color-bg-surface); border: 1px solid var(--ob-color-status-danger); border-radius: 0.75rem; }
+.route-error p { color: var(--ob-color-text-secondary); }
+.simulated-drawer.ob-sheet-content[data-side="right"] { top: 0; right: 0; bottom: 0; left: auto; width: min(28rem, calc(100vw - 1.5rem)); max-height: none; height: 100%; transform: none; border-radius: 0; }

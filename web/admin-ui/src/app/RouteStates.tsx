@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AppForbiddenPage, AppNotFoundPage } from "@openbastion/ui";
+import { AppErrorBoundary, AppForbiddenPage, AppNotFoundPage } from "@openbastion/ui";
 import { useAppTranslation } from "../shared/i18n";
 import { useCapabilities } from "../shared/capabilities";
 import { tabAllowed, tabNeeds, viewOf, type Tab } from "./navigation";
@@ -38,5 +38,27 @@ export function ViewGate({ tab, view, children }: { tab: Tab; view: string | und
       title={t("shell.forbidden.title")}
       detail={t("shell.forbidden.detail", { capability: needs.join(", ") })}
     />
+  );
+}
+
+// ADR-0137 §5: one error boundary per route. A render error in a screen shows an explicit,
+// recoverable state inside the shell (navigation stays usable) instead of a blank page. The
+// error message is never printed: it may carry sensitive text. The boundary clears itself when
+// the address changes, so a failed screen does not keep the next one hostage.
+export function RouteBoundary({ routeKey, children }: { routeKey: string; children: ReactNode }) {
+  const { t } = useAppTranslation();
+  return (
+    <AppErrorBoundary
+      resetKeys={[routeKey]}
+      fallback={(_error, reset) => (
+        <div role="alert" className="route-error">
+          <h2>{t("shell.routeError.title")}</h2>
+          <p>{t("shell.routeError.detail")}</p>
+          <button type="button" className="ob-button ob-button--secondary" onClick={reset}>{t("common.actions.retry")}</button>
+        </div>
+      )}
+    >
+      {children}
+    </AppErrorBoundary>
   );
 }

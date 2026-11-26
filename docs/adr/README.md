@@ -457,3 +457,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 
 | [ADR-0140](0140-contrats-de-session-et-denregistrement-des-operations-postgresql.md) | Les contrats PostgreSQL séparent l’établissement de session et l’acquittement des opérations | Proposé | Proxy base de données |
 | [ADR-0141](0141-le-client-rdp-annonce-dstblt-apres-decoder-son-profil-complet.md) | Le client RDP annonce DstBlt seulement après décodage de son profil complet | Accepté | Proxy écran RDP et VNC |
+| [ADR-0142](0142-les-elements-de-maquette-sans-contrat-d-api-sont-simules-et-signales.md) | Les éléments de maquette sans contrat d'API sont simulés, signalés et isolés | Proposé | Admin UI |

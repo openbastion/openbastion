@@ -72,7 +72,13 @@ export const destinations: readonly Destination[] = [
     views: [{ id: "journal" }, { id: "reports" }, { id: "evidence" }, { id: "retention" }],
   },
   { id: "posture", path: "/security", icon: Security, group: "workspace", needs: ["accounts.list"] },
-  { id: "settings", path: "/settings", icon: Settings, group: "workspace" },
+  {
+    id: "settings",
+    path: "/settings",
+    icon: Settings,
+    group: "workspace",
+    views: [{ id: "general" }, { id: "security" }, { id: "identities" }, { id: "integrations" }, { id: "notifications" }],
+  },
 ];
 
 export const groups = ["workspace"] as const;
