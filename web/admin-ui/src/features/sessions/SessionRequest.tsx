@@ -1,10 +1,9 @@
 import { FormEvent, useRef, useState } from "react";
-import { FormField, Input, Select, Textarea } from "@openbastion/ui";
+import { Button, FormField, Input, Select, Textarea } from "@openbastion/ui";
 import { ApiError, Session } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { useAppTranslation } from "../../shared/i18n";
 import { FormCard } from "../../shared/ui/FormCard";
-import { Button } from "../../shared/ui/Button";
 
 const TICKET_MAX = 128;
 

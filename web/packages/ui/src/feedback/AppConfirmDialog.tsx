@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "../components/AlertDialog";
 import { Alert } from "../components/Alert";
 import { Button } from "../components/Button";
@@ -32,6 +32,14 @@ export function AppConfirmDialog({
 }: AppConfirmDialogProps) {
   const [working, setWorking] = useState(false);
   const busy = useRef(false);
+  // The dialog is unmounted by its caller, so Radix has no trigger to return to (its alert dialog
+  // sends focus to the removed Cancel button): the element that had focus is restored here, or the
+  // page's focus fallback (the heading marked `data-confirm-focus-fallback`) when it is gone.
+  const trigger = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  useEffect(() => () => {
+    if (trigger.current?.isConnected) trigger.current.focus();
+    else document.querySelector<HTMLElement>("[data-confirm-focus-fallback]")?.focus();
+  }, []);
 
   async function submit() {
     if (busy.current) return;

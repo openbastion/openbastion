@@ -1,5 +1,5 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BrowserRouter, MemoryRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { Api, claims } from "../shared/api";
 import { SignedInContext } from "../shared/session";
 import { Login } from "../features/login/Login";
@@ -11,10 +11,13 @@ import { SecurityCenter } from "../features/security/SecurityCenter";
 import { Infrastructure } from "../features/infrastructure/Infrastructure";
 import { Settings } from "../features/settings/Settings";
 import { Sessions } from "../features/sessions/Sessions";
+import type { View as AccountsView } from "../features/accounts/Accounts";
+import type { View as SessionsView } from "../features/sessions/Sessions";
+import type { View as AuditView } from "../features/audit/AuditCompliance";
 import { LegalNotice } from "../shared/LegalNotice";
 import { AppShell } from "./AppShell";
-import { Tab, routerBasename, tabAllowed, tabFromPath, tabPath, destinations } from "./navigation";
-import { CapabilityGate, NotFound } from "./RouteStates";
+import { Tab, routerBasename, tabAllowed, tabFromPath, tabPath, viewPath, destinations } from "./navigation";
+import { CapabilityGate, NotFound, ViewGate } from "./RouteStates";
 import type { TokenClaims } from "../shared/api";
 import { readOperatorPreferences } from "../shared/operatorPreferences";
 import { Capabilities, CapabilitiesContext, capabilitiesFrom, parseCapabilities } from "../shared/capabilities";
@@ -95,30 +98,40 @@ function Router({ initialEntries, children }: { initialEntries?: string[]; child
 function SignedInRoutes({ who, capabilities, onSignOut }: { who: TokenClaims | null; capabilities: Capabilities; onSignOut: () => void }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [accountsInitialView, setAccountsInitialView] = useState<"resources" | "accounts" | "policies" | "requests">("resources");
   const [sessionLookup, setSessionLookup] = useState<string | null>(null);
   const goTo = useCallback((next: Tab | "policies") => {
     if (next === "policies") {
-      setAccountsInitialView("policies");
-      navigate(tabPath("accounts"));
+      navigate(viewPath("accounts", "policies"));
       return;
     }
     navigate(tabPath(next));
   }, [navigate]);
   const findSession = useCallback((id: string) => {
-    navigate(tabPath("sessions"));
+    navigate(viewPath("sessions", "live"));
     setSessionLookup(id);
   }, [navigate]);
   const clearSessionLookup = useCallback(() => setSessionLookup(null), []);
 
-  const screens: Record<Tab, ReactNode> = {
-    overview: <Overview onNavigate={goTo} />,
-    accounts: <Accounts onNavigate={goTo} initialView={accountsInitialView} />,
-    sessions: <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />,
-    infrastructure: <Infrastructure onNavigate={goTo} />,
-    security: <AuditCompliance onNavigate={goTo} />,
-    posture: <SecurityCenter />,
-    settings: <Settings />,
+  // ADR-0137 §4: the tabs of Accès privilégiés, Sessions and Audit & conformité are sub-routes;
+  // the tab shown is the address, and choosing one navigates.
+  // A tab fires its change on press AND on focus, before the router has re-rendered: only an address
+  // other than the last one asked for is a history entry.
+  const requested = useRef(pathname);
+  requested.current = pathname;
+  const toView = (tab: Tab) => (view: string) => {
+    const to = viewPath(tab, view);
+    if (to === requested.current) return;
+    requested.current = to;
+    navigate(to);
+  };
+  const screens: Record<Tab, (view?: string) => ReactNode> = {
+    overview: () => <Overview onNavigate={goTo} />,
+    accounts: (view) => <Accounts onNavigate={goTo} view={view as AccountsView} onViewChange={toView("accounts")} />,
+    sessions: (view) => <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} view={view as SessionsView} onViewChange={toView("sessions")} />,
+    infrastructure: () => <Infrastructure onNavigate={goTo} />,
+    security: (view) => <AuditCompliance onNavigate={goTo} view={view as AuditView} onViewChange={toView("security")} />,
+    posture: () => <SecurityCenter />,
+    settings: () => <Settings />,
   };
   // The stored default screen opens at "/"; one the caller may not see falls back to the overview.
   const defaultTab = readOperatorPreferences().defaultTab;
@@ -135,15 +148,36 @@ function SignedInRoutes({ who, capabilities, onSignOut }: { who: TokenClaims | n
     >
       <Routes>
         <Route path="/" element={<Navigate to={tabPath(landing)} replace />} />
-        {destinations.map((destination) => (
-          <Route
-            key={destination.id}
-            path={destination.path}
-            element={<CapabilityGate tab={destination.id}>{screens[destination.id]}</CapabilityGate>}
-          />
-        ))}
+        {destinations.map((destination) =>
+          destination.views ? (
+            [
+              <Route key={destination.id} path={destination.path} element={<Navigate to={viewPath(destination.id, destination.views[0].id)} replace />} />,
+              <Route
+                key={`${destination.id}/view`}
+                path={`${destination.path}/:view`}
+                element={<ViewRoute tab={destination.id} render={screens[destination.id]} />}
+              />,
+            ]
+          ) : (
+            <Route
+              key={destination.id}
+              path={destination.path}
+              element={<CapabilityGate tab={destination.id}>{screens[destination.id]()}</CapabilityGate>}
+            />
+          ),
+        )}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppShell>
+  );
+}
+
+// `/access/:view`, `/sessions/:view`, `/audit/:view`: the destination's gate, then the tab's.
+function ViewRoute({ tab, render }: { tab: Tab; render: (view?: string) => ReactNode }) {
+  const { view } = useParams();
+  return (
+    <CapabilityGate tab={tab}>
+      <ViewGate tab={tab} view={view}>{render(view)}</ViewGate>
+    </CapabilityGate>
   );
 }

@@ -3,14 +3,11 @@ import { Account, ApiError, Page, Session, accountPath } from "../../shared/api"
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
-import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { ScreenProfileDialog } from "./ScreenProfileDialog";
 import { KerberosDialog } from "./KerberosDialog";
-import { Button } from "../../shared/ui/Button";
-import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
 import { ReferencePager } from "../../shared/ui/ReferencePager";
-import { Form, Input, Label, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { Alert, AppConfirmDialog, Button, Form, Input, Label, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { ChevronDown, ChevronUp, Download, Filter, Plus, Search } from "@openbastion/icons";
 import { PolicyForm } from "../policies/Policies";
 import { AccountActions, AccountTable } from "./AccountTable";
@@ -20,6 +17,7 @@ import { ApprovalHierarchy } from "./ApprovalHierarchy";
 import { PendingRequests } from "../sessions/PendingRequests";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
+import { useRoutedView } from "../../shared/useRoutedView";
 import { useAppTranslation } from "../../shared/i18n";
 import { useCapabilities } from "../../shared/capabilities";
 import { GatedButton } from "../../shared/ui/GatedButton";
@@ -38,7 +36,7 @@ import {
 const pageSize = 20;
 const approvalPreview = 3;
 
-type View = "resources" | "accounts" | "policies" | "requests" | "hierarchy";
+export type View = "resources" | "accounts" | "policies" | "requests" | "hierarchy";
 
 // Privileged accounts of the Vault: list, onboard, rotate, disable. A secret is typed once at
 // onboarding and never shown again: the API never returns one. A rotation changes the secret on
@@ -54,9 +52,14 @@ type View = "resources" | "accounts" | "policies" | "requests" | "hierarchy";
 export function Accounts({
   onNavigate,
   initialView = "resources",
+  view: routedView,
+  onViewChange,
 }: {
   onNavigate?: (tab: "sessions") => void;
   initialView?: View;
+  // ADR-0137: when the application gives them, the tab is the address (`/access/<view>`).
+  view?: View;
+  onViewChange?: (view: View) => void;
 } = {}) {
   const { t } = useAppTranslation();
   const { api, who } = useSignedIn();
@@ -71,7 +74,7 @@ export function Accounts({
     hierarchy: visible("approvalHierarchy.read", "approvalHierarchy.manage", "approvalHierarchy.reports"),
   };
   const firstShown = (["resources", "accounts", "policies", "requests", "hierarchy"] as const).find((v) => viewShown[v]) ?? "resources";
-  const [chosenView, setView] = useState<View>(initialView);
+  const [chosenView, setView] = useRoutedView<View>(initialView, routedView, onViewChange);
   const view: View = viewShown[chosenView] ? chosenView : firstShown;
   const mayList = visible("accounts.list");
   const [page, setPage] = useState(1);
@@ -559,7 +562,7 @@ export function Accounts({
                       </Form>
                       <Button disabled={!selectedSavedView} onClick={deleteSavedView}>{t("accounts.views.delete")}</Button>
                     </div>
-                    {viewNotice ? <InlineNotice tone="success">{viewNotice}</InlineNotice> : null}
+                    {viewNotice ? <Alert tone="success">{viewNotice}</Alert> : null}
                     <p className="ob-filter-help">{t("accounts.views.help")}</p>
                   </div>
                 ) : null}
@@ -669,7 +672,9 @@ export function Accounts({
         />
       ) : null}
       {approvalDecision ? (
-        <ConfirmDialog
+        <AppConfirmDialog
+          cancelLabel={t("common.actions.cancel")}
+          workingLabel={t("common.actions.working")}
           title={approvalDecision.kind === "approve" ? t("sessions.confirm.approveTitle") : t("sessions.confirm.rejectTitle")}
           description={t("sessions.confirm.decideBody", {
             kind: approvalDecision.session.breakGlass ? t("sessions.confirm.emergency") : t("sessions.confirm.access"),
@@ -688,7 +693,9 @@ export function Accounts({
         />
       ) : null}
       {accountAction ? (
-        <ConfirmDialog
+        <AppConfirmDialog
+          cancelLabel={t("common.actions.cancel")}
+          workingLabel={t("common.actions.working")}
           title={accountAction.kind === "disable" ? t("accounts.confirm.disableTitle") : t("accounts.confirm.rotateTitle")}
           description={accountAction.kind === "disable"
             ? t("accounts.confirm.disableBody", { id: accountAction.account.id })

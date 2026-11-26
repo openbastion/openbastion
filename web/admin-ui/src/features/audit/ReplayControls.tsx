@@ -1,5 +1,4 @@
-import { Label, Select, Slider } from "@openbastion/ui";
-import { Button } from "../../shared/ui/Button";
+import { Button, Label, Select, Slider } from "@openbastion/ui";
 import { useAppTranslation } from "../../shared/i18n";
 
 // The controls of a replay, under its frame (ADR-0088): play or pause, step, position, speed, and

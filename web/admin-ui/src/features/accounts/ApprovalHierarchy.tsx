@@ -3,11 +3,8 @@ import { ApiError } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { useCapabilities } from "../../shared/capabilities";
 import { useAppTranslation } from "../../shared/i18n";
-import { Button } from "../../shared/ui/Button";
-import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
-import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { ReferencePager } from "../../shared/ui/ReferencePager";
-import { Form, Input, Label } from "@openbastion/ui";
+import { Alert, AppConfirmDialog, Button, Form, Input, Label } from "@openbastion/ui";
 
 type ManagerView = { userId: string; manager: { userId: string; updatedAt: string } | null; revision: number };
 type ReportsPage = { items: { userId: string; updatedAt: string }[]; page: number; pageSize: number; totalItems: number; revision: number };
@@ -125,9 +122,9 @@ export function ApprovalHierarchy() {
           <p>{t("accounts.hierarchy.description")}</p>
         </div>
       </div>
-      <InlineNotice tone="info">{t("accounts.hierarchy.invariant")}</InlineNotice>
-      {error ? <InlineNotice tone="danger" role="alert">{errorText(error)}</InlineNotice> : null}
-      {success ? <InlineNotice tone="success" role="status">{success}</InlineNotice> : null}
+      <Alert tone="info">{t("accounts.hierarchy.invariant")}</Alert>
+      {error ? <Alert tone="danger" role="alert">{errorText(error)}</Alert> : null}
+      {success ? <Alert tone="success" role="status">{success}</Alert> : null}
 
       <section className="ob-surface ob-panel" aria-labelledby="hierarchy-manager-title">
         <h4 id="hierarchy-manager-title">{t("accounts.hierarchy.managerLookup")}</h4>
@@ -188,7 +185,9 @@ export function ApprovalHierarchy() {
       </section>
 
       {pending ? (
-        <ConfirmDialog
+        <AppConfirmDialog
+          cancelLabel={t("common.actions.cancel")}
+          workingLabel={t("common.actions.working")}
           title={pending.kind === "set" ? t("accounts.hierarchy.confirmSetTitle") : t("accounts.hierarchy.confirmRemoveTitle")}
           description={pending.kind === "set"
             ? t("accounts.hierarchy.confirmSetBody", { user: pending.userId, manager: pending.managerUserId })

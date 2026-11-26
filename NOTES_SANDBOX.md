@@ -5679,3 +5679,11 @@ Validation de l'incrément 65 :
 - Correctif du job PostgreSQL CI : le build de `gosu` utilise maintenant le pseudo-version Go immuable `v0.0.0-20261025094355-29b939aa5bd4` (commit source `29b939aa5bd4dc588af765b8248f6e39150d2565`) via le proxy Go et son checksum, au lieu d'un `git fetch` GitHub qui répondait HTTP 403. Build Docker PostgreSQL validé localement avec succès.
 - Validation locale après le correctif Fast-Path : `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` PASS ; `go test ./pkg/rdp -count=1` PASS ; `go test -race ./pkg/rdp -count=1` PASS ; `go vet ./pkg/rdp` PASS ; `cd services/proxy/rdp-vnc-proxy && go test -race ./... -count=1` PASS ; `FuzzParseRDPFastPathOrdersUpdate` PASS (116 186 exécutions en 5 s, 72 nouveaux cas intéressants) ; `git diff --check` PASS.
 - Les tests Windows Server 2019/2022 restent exclusivement en CI. Aucun test Windows exécuté localement.
+## Incrément ADR-0137 — Accès, Sessions, Audit sur sous-routes
+
+- Les onglets de `/access` (`resources|accounts|policies|requests|hierarchy`), `/sessions` (`live|history|recordings|alerts`) et `/audit` (`journal|reports|evidence|retention`) sont des sous-routes déclarées dans `app/navigation.ts` (`views`, capacité par onglet). L'adresse nue redirige vers le premier onglet ; un onglet inconnu est un 404 (aucune destination courante) ; un onglet sans capacité est un 403 qui la nomme (`ViewGate`). Les écrans restent utilisables seuls (`useRoutedView` : état local sans `view`/`onViewChange`).
+- `ConfirmDialog` local supprimé : `AppConfirmDialog` de `@openbastion/ui` (Annuler/Travail en cours passés par l'appelant). Le composant restitue le focus à l'élément déclencheur à son démontage (Radix l'envoyait au bouton Annuler retiré).
+- `Button`, `Badge`, `InlineNotice` des trois vues viennent directement de `@openbastion/ui` (`Alert`).
+- Un onglet déclenche son changement à l'appui puis au focus : `toView` ne pousse qu'une entrée d'historique par adresse.
+- Tests : `web/admin-ui/e2e/adr-0137-{access,sessions,audit}.spec.ts` (Playwright, pile en marche, 1 connexion par spec, la Gateway limite les connexions : 5 puis 1/min). Vitest : 369 tests.
+- Pas encore fait : filtres en `searchParams`, sous-route `onboard`, `AppErrorBoundary` par route, migration de `GatedButton`/`Modal`/`AdminPage`.

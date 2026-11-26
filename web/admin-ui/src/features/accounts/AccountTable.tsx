@@ -1,7 +1,7 @@
 import { Account } from "../../shared/api";
-import { Badge } from "../../shared/ui/Badge";
 import { GatedButton } from "../../shared/ui/GatedButton";
 import { useAppTranslation } from "../../shared/i18n";
+import { Badge } from "@openbastion/ui";
 
 // What a row can ask of its account. The screen owns the calls and the notices; the table only
 // says which account each button names.

@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Account, ApiError, Page } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
-import { Button } from "../../shared/ui/Button";
 import { Notice } from "../../shared/Notice";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
 import { ReferencePager } from "../../shared/ui/ReferencePager";
+import { useRoutedView } from "../../shared/useRoutedView";
 import { useAppTranslation } from "../../shared/i18n";
-import { Input, Label, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { Button, Input, Label, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { ChevronDown, Download, Search } from "@openbastion/icons";
 import { countByKind, findingsFor } from "./posture";
 
@@ -22,11 +22,19 @@ const pageSize = 20;
 // counts events or denied access, and no route publishes a retention policy. What is real here is
 // the recording guarantee (every admitted session is recorded or refused, ADR-0008) and the
 // configuration signals computed from the accounts the Vault returns.
+export type View = "journal" | "reports" | "evidence" | "retention";
+
 export function AuditCompliance({
   onNavigate,
+  view: routedView,
+  onViewChange,
 }: {
   onNavigate?: (tab: "accounts" | "sessions") => void;
+  // ADR-0137: when the application gives them, the tab is the address (`/audit/<view>`).
+  view?: View;
+  onViewChange?: (view: View) => void;
 } = {}) {
+  const [view, setView] = useRoutedView<View>("journal", routedView, onViewChange);
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [data, setData] = useState<Page<Account>>();
@@ -133,7 +141,7 @@ export function AuditCompliance({
         </section>
       </div>
 
-      <Tabs defaultValue="journal" className="reference-tabs audit-tabs">
+      <Tabs value={view} onValueChange={(next) => setView(next as View)} className="reference-tabs audit-tabs">
         <TabsList aria-label={t("auditCompliance.tabsAria")}>
           <TabsTrigger value="journal">{t("auditCompliance.tabs.journal")}</TabsTrigger>
           <TabsTrigger value="reports">{t("auditCompliance.tabs.reports")}</TabsTrigger>

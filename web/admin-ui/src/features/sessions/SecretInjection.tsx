@@ -2,9 +2,7 @@ import { FormEvent, useRef, useState } from "react";
 import { ApiError, SecretActionStepUpChallenge, Session, sessionPath } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
-import { Form, FormField, Input } from "@openbastion/ui";
-import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
-import { Button } from "../../shared/ui/Button";
+import { AppConfirmDialog, Button, Form, FormField, Input } from "@openbastion/ui";
 import { GatedButton } from "../../shared/ui/GatedButton";
 import { Credentials, sign } from "../../shared/webauthn";
 import { useAppTranslation } from "../../shared/i18n";
@@ -174,7 +172,9 @@ export function SecretInjection({ session, credentials, onConflict }: { session:
       )}
       <Notice error={error} ok={ok} />
       {confirming ? (
-        <ConfirmDialog
+        <AppConfirmDialog
+          cancelLabel={t("common.actions.cancel")}
+          workingLabel={t("common.actions.working")}
           title={t("sessions.secretInjection.confirmTitle")}
           description={t("sessions.secretInjection.warning", { protocol: session.protocol.toUpperCase() })}
           confirmLabel={t("sessions.secretInjection.continue")}

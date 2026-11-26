@@ -27,6 +27,15 @@ export interface Destination {
   group: "workspace";
   // ADR-0131: capabilities of which the caller needs at least one; absent = every signed-in caller.
   needs?: Capability[];
+  // Sub-routes (the tabs of the page), the first being the default one: `/access` redirects to
+  // `/access/resources`. Absent = the destination has no sub-route.
+  views?: readonly DestinationView[];
+}
+
+export interface DestinationView {
+  id: string;
+  // Capabilities of which the caller needs at least one to open this view; absent = the destination's.
+  needs?: Capability[];
 }
 
 // Sidebar order: Vue d'ensemble, Accès privilégiés, Sessions, Infrastructure, Audit & conformité,
@@ -39,10 +48,29 @@ export const destinations: readonly Destination[] = [
     icon: Users,
     group: "workspace",
     needs: ["accounts.list", "accounts.onboard", "policies.create", "sessions.approve"],
+    views: [
+      { id: "resources", needs: ["accounts.list"] },
+      { id: "accounts", needs: ["accounts.list"] },
+      { id: "policies", needs: ["policies.create"] },
+      { id: "requests", needs: ["sessions.approve"] },
+      { id: "hierarchy", needs: ["approvalHierarchy.read", "approvalHierarchy.manage", "approvalHierarchy.reports"] },
+    ],
   },
-  { id: "sessions", path: "/sessions", icon: Session, group: "workspace" },
+  {
+    id: "sessions",
+    path: "/sessions",
+    icon: Session,
+    group: "workspace",
+    views: [{ id: "live" }, { id: "history" }, { id: "recordings", needs: ["recordings.read"] }, { id: "alerts" }],
+  },
   { id: "infrastructure", path: "/infrastructure", icon: Infrastructure, group: "workspace" },
-  { id: "security", path: "/audit", icon: Shield, group: "workspace" },
+  {
+    id: "security",
+    path: "/audit",
+    icon: Shield,
+    group: "workspace",
+    views: [{ id: "journal" }, { id: "reports" }, { id: "evidence" }, { id: "retention" }],
+  },
   { id: "posture", path: "/security", icon: Security, group: "workspace", needs: ["accounts.list"] },
   { id: "settings", path: "/settings", icon: Settings, group: "workspace" },
 ];
@@ -61,8 +89,11 @@ export function tabPath(tab: Tab): string {
 // The destination whose path is the first segment of `pathname` (sub-routes arrive with the
 // following increments); undefined for an unknown address, which the router answers with a 404.
 export function tabFromPath(pathname: string): Tab | undefined {
-  const segment = `/${pathname.split("/")[1] ?? ""}`;
-  return destinations.find((destination) => destination.path === segment)?.id;
+  const [, first = "", second] = pathname.split("/");
+  const destination = destinations.find((candidate) => candidate.path === `/${first}`);
+  // An unknown tab of a destination is an unknown address (404), not that destination.
+  if (destination && second && destination.views && !destination.views.some((view) => view.id === second)) return undefined;
+  return destination?.id;
 }
 
 export function tabAllowed(capabilities: Capabilities, tab: Tab): boolean {
@@ -72,6 +103,16 @@ export function tabAllowed(capabilities: Capabilities, tab: Tab): boolean {
 
 export function tabNeeds(tab: Tab): Capability[] {
   return destinationOf(tab).needs ?? [];
+}
+
+// The sub-route of a destination (undefined when the destination has none or the id is unknown,
+// which the router answers with a 404).
+export function viewOf(tab: Tab, view: string | undefined): DestinationView | undefined {
+  return destinationOf(tab).views?.find((candidate) => candidate.id === view);
+}
+
+export function viewPath(tab: Tab, view: string): string {
+  return `${tabPath(tab)}/${view}`;
 }
 
 // react-router wants a basename without trailing slash: Vite's BASE_URL is `/ui/` or `/`.
