@@ -1,11 +1,8 @@
 import { useMemo, useState } from "react";
 import { Page, Session } from "../../shared/api";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { Badge } from "../../shared/ui/Badge";
-import { Button } from "../../shared/ui/Button";
-import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { useAppTranslation } from "../../shared/i18n";
-import { Input, Label } from "@openbastion/ui";
+import { Alert, Badge, Button, Input, Label } from "@openbastion/ui";
 
 // The requests waiting for this user's decision — break-glass (ADR-0012) and approval (ADR-0067).
 // Search is deliberately local to the bounded page returned by the Broker; the table never
@@ -99,7 +96,7 @@ export function PendingRequests({
                         <td>{session.ticket ? <code>{session.ticket}</code> : "—"}</td>
                         <td>{dateTime(session.expiresAt)}</td>
                         <td className="ob-table-actions">
-                          {ownRequest ? <InlineNotice tone="warning">{t("sessions.pending.ownRequest")}</InlineNotice> : (
+                          {ownRequest ? <Alert tone="warning">{t("sessions.pending.ownRequest")}</Alert> : (
                             <div>
                               <Button aria-label={t("sessions.pending.approveAria", { id: session.id })} onClick={() => onApprove(session)}>
                                 {t("sessions.pending.approve")}
@@ -119,7 +116,7 @@ export function PendingRequests({
           ) : null}
         </>
       ) : null}
-      {!loading && pending?.truncated ? <InlineNotice tone="warning">{t("sessions.pending.truncated")}</InlineNotice> : null}
+      {!loading && pending?.truncated ? <Alert tone="warning">{t("sessions.pending.truncated")}</Alert> : null}
     </section>
   );
 }

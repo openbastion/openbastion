@@ -1,8 +1,6 @@
 import { FormEvent, useState } from "react";
-import { FormField, Input, Textarea } from "@openbastion/ui";
+import { Alert, Button, FormField, Input, Textarea } from "@openbastion/ui";
 import { Account, KerberosSettings } from "../../shared/api";
-import { Button } from "../../shared/ui/Button";
-import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { Modal } from "../../shared/ui/Modal";
 import { useAppTranslation } from "../../shared/i18n";
 
@@ -93,8 +91,8 @@ export function KerberosDialog({
             : t("accounts.kerberos.notPinned")}
         </p>
         <p className="ob-hint">{t("accounts.kerberos.hint")}</p>
-        {problem ? <InlineNotice tone="warning">{t(`accounts.kerberos.problems.${problem}`, { max: maxKerberosKDCs })}</InlineNotice> : null}
-        {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+        {problem ? <Alert tone="warning">{t(`accounts.kerberos.problems.${problem}`, { max: maxKerberosKDCs })}</Alert> : null}
+        {error ? <Alert tone="danger">{error}</Alert> : null}
         <div className="ob-form-actions">
           <Button type="button" disabled={working} onClick={onCancel}>{t("common.actions.cancel")}</Button>
           {account.kerberos ? (

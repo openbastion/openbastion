@@ -38,4 +38,25 @@ describe("ADR-0137 — navigation adressable", () => {
     expect(await screen.findByText("Page introuvable")).toBeTruthy();
     await waitFor(() => expect(document.querySelector('[aria-current="page"]')).toBeNull());
   });
+
+  it("redirects a destination with tabs to its first tab and follows a tab address", async () => {
+    window.localStorage.clear();
+    await signIn("/access", ["platform-admin"]);
+    expect(await screen.findByRole("tab", { name: /Ressources/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Ressources/ }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Comptes/ }));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Comptes/ }).getAttribute("aria-selected")).toBe("true"));
+  });
+
+  it("opens the tab named by the address, and answers an unknown tab with a 404", async () => {
+    window.localStorage.clear();
+    await signIn("/audit/evidence", ["platform-admin"]);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Preuves/ }).getAttribute("aria-selected")).toBe("true"));
+  });
+
+  it("answers an unknown tab with a 404", async () => {
+    window.localStorage.clear();
+    await signIn("/sessions/nope", ["platform-admin"]);
+    expect(await screen.findByText("Page introuvable")).toBeTruthy();
+  });
 });

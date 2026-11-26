@@ -1,6 +1,6 @@
-import { Button } from "../../shared/ui/Button";
 import { Session } from "../../shared/api";
 import { useAppTranslation } from "../../shared/i18n";
+import { Button } from "@openbastion/ui";
 
 // "Il y a 12 min": a request waits for a person, so the age of the request is what matters, not
 // the absolute timestamp. A date the browser cannot parse is shown as is.

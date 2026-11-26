@@ -27,7 +27,7 @@ test("one skip link, one navigation, one main landmark, one legal footer", async
 test("the shell is not rebuilt between destinations (same sidebar node)", async () => {
   await page.evaluate(() => { (document.querySelector("#admin-navigation") as any).__marker = "kept"; });
   await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Sessions", exact: true }).click();
-  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions");
+  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions/live");
   expect(await page.evaluate(() => (document.querySelector("#admin-navigation") as any).__marker)).toBe("kept");
   await expect(page.locator("main#main-content")).toBeFocused();
 });
@@ -67,7 +67,7 @@ test("mobile navigation: choosing a destination navigates and closes", async () 
   await page.setViewportSize({ width: 390, height: 800 });
   await page.locator(".mobile-menu-toggle").click();
   await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Sessions", exact: true }).click();
-  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions");
+  await expect.poll(() => pathnameOf(page, basePath)).toBe("/sessions/live");
   await expect(page.locator(".navigation-backdrop")).toHaveCount(0);
 });
 

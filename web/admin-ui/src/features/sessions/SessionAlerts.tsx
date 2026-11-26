@@ -3,10 +3,7 @@ import { ApiError, SessionAlert, SessionAlertPage, SessionAlertSummary } from ".
 import { useSignedIn } from "../../shared/session";
 import { useAppTranslation } from "../../shared/i18n";
 import { Notice } from "../../shared/Notice";
-import { Button } from "../../shared/ui/Button";
-import { Badge } from "../../shared/ui/Badge";
-import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
-import { Form, Label, Select } from "@openbastion/ui";
+import { AppConfirmDialog, Badge, Button, Form, Label, Select } from "@openbastion/ui";
 
 const PAGE_SIZE = 50;
 
@@ -227,7 +224,9 @@ export function SessionAlerts({ onSummaryChange }: { onSummaryChange?: (summary:
       ) : null}
 
       {confirmAlert ? (
-        <ConfirmDialog
+        <AppConfirmDialog
+          cancelLabel={t("common.actions.cancel")}
+          workingLabel={t("common.actions.working")}
           title={t("sessions.alerts.confirmTitle")}
           description={t("sessions.alerts.confirmBody", { id: confirmAlert.id })}
           confirmLabel={t("sessions.alerts.confirmAcknowledge")}

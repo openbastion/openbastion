@@ -1,11 +1,10 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { FormField, Input } from "@openbastion/ui";
+import { Badge, FormField, Input } from "@openbastion/ui";
 import { RecordingPage, sessionPath } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { FormCard } from "../../shared/ui/FormCard";
 import { Pager } from "../../shared/ui/Pager";
-import { Badge } from "../../shared/ui/Badge";
 import { VideoReplay } from "./VideoReplay";
 import { useAppTranslation } from "../../shared/i18n";
 import { SecretInjectionReconciliation } from "./SecretInjectionReconciliation";
