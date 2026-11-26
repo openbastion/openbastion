@@ -80,6 +80,13 @@ func TestParseRDPFastPathOrdersUpdateUsesSharedOrderState(t *testing.T) {
 	if err != nil || !next.memBltUsed || len(update.Rectangles) != 1 {
 		t.Fatalf("Fast-Path MemBlt update=%+v state=%+v err=%v", update, next, err)
 	}
+	mem3Blt := mcsTestRDPMem3BltOrder(0, 0, 0, 0, 2, 2, 0xf0, 0, 0, [3]byte{0x12, 0x34, 0x56}, 0)
+	mem3Data := mcsTestOrdersUpdateData(1, mem3Blt, 0, 0)
+	fastMem3Data := append(append([]byte(nil), mem3Data[2:4]...), mem3Data[6:]...)
+	mem3Update, mem3State, err := parseRDPFastPathOrdersUpdateAt(fastMem3Data, 8, 8, 32, next)
+	if err != nil || !mem3State.mem3BltUsed || len(mem3Update.Rectangles) != 1 {
+		t.Fatalf("Fast-Path Mem3Blt update=%+v state=%+v err=%v", mem3Update, mem3State, err)
+	}
 }
 
 func TestParseRDPFastPathOrdersUpdateRejectsMalformedCountsAndOrders(t *testing.T) {
