@@ -27,6 +27,7 @@ const (
 
 	rdpOrderSupportOffset          = 36 // TS_ORDER_CAPABILITYSET: orderSupport starts after its 36-byte fixed prefix.
 	rdpOrderSupportDstBltIndex     = 0  // TS_NEG_DSTBLT_INDEX.
+	rdpOrderSupportScrBltIndex     = 2  // TS_NEG_SCRBLT_INDEX.
 	rdpOrderSupportMemBltIndex     = 3  // TS_NEG_MEMBLT_INDEX.
 	rdpOrderSupportMem3BltIndex    = 4  // TS_NEG_MEM3BLT_INDEX.
 	rdpOrderSupportExFlagsOffset   = 70 // orderSupportExFlags follows orderSupport and textFlags.
@@ -134,7 +135,7 @@ func setRDPPrimaryOrderProfileLocked(s *CredSSPClientSession) {
 	s.mem3BltEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 	s.dstBltEnabled = true
 	s.patBltOpaqueRectEnabled = false
-	s.scrBltEnabled = false
+	s.scrBltEnabled = true
 	s.multiDstBltEnabled = false
 	s.multiPatBltEnabled = false
 	s.multiScrBltEnabled = false
@@ -350,14 +351,15 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	caps = append(caps, bitmap...)
 	clear(bitmap)
 
-	// DstBlt is depth-independent. At 32 bpp, add MemBlt/Mem3Blt only alongside their complete
-	// bitmap-cache profile; every other primary-order slot remains zero until fully implemented.
+	// DstBlt and the strict source-copy ScrBlt profile are depth-independent. At 32 bpp, add
+	// MemBlt/Mem3Blt only alongside their complete bitmap-cache profile; other slots stay zero.
 	order := make([]byte, 88)
 	binary.LittleEndian.PutUint16(order[:2], rdpCapOrder)
 	binary.LittleEndian.PutUint16(order[2:4], uint16(len(order)))
 	binary.LittleEndian.PutUint16(order[30:32], 1)      // ORD_LEVEL_1_ORDERS
 	binary.LittleEndian.PutUint16(order[34:36], 0x000a) // NEGOTIATEORDERSUPPORT | ZEROBOUNDSDELTASSUPPORT; EXTRA_FLAGS is added for 32 bpp.
 	order[rdpOrderSupportOffset+rdpOrderSupportDstBltIndex] = 1
+	order[rdpOrderSupportOffset+rdpOrderSupportScrBltIndex] = 1
 	if sessionBPP == 32 {
 		order[rdpOrderSupportOffset+rdpOrderSupportMemBltIndex] = 1
 		order[rdpOrderSupportOffset+rdpOrderSupportMem3BltIndex] = 1

@@ -159,8 +159,8 @@ func TestReadBitmapUpdateReactivates(t *testing.T) {
 		t.Fatal("the primary-order state or bitmap cache of the old share survived the reactivation")
 	}
 	if !session.primaryOrdersEnabled || !session.dstBltEnabled || !session.memBltEnabled || !session.mem3BltEnabled ||
-		session.patBltOpaqueRectEnabled || session.scrBltEnabled {
-		t.Fatalf("new share did not restore exactly the negotiated DstBlt profile: %+v", session)
+		session.patBltOpaqueRectEnabled || !session.scrBltEnabled {
+		t.Fatalf("new share did not restore exactly the negotiated DstBlt/ScrBlt profile: %+v", session)
 	}
 	if update.DesktopWidth != 1024 || update.DesktopHeight != 768 || len(update.Rectangles) != 1 || update.Rectangles[0].X != 1000 {
 		t.Fatalf("update %dx%d, %d rectangle(s)", update.DesktopWidth, update.DesktopHeight, len(update.Rectangles))
