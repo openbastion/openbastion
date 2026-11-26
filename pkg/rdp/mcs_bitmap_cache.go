@@ -12,6 +12,9 @@ const (
 	rdpCacheBitmapUncompressedRev2        = byte(0x04)
 	rdpCacheBitmapCompressedRev2          = byte(0x05)
 	rdpCacheBitmapCompressedRev3          = byte(0x08)
+	rdpCacheColorTable                    = byte(0x01)
+	rdpCacheGlyph                         = byte(0x03)
+	rdpCacheBrush                         = byte(0x07)
 	rdpCacheBitmapRev2CacheID             = uint16(0)
 	rdpCacheBitmapRev2BitsPerPixel32      = uint16(6)
 	rdpCacheBitmapRev2HeightSame          = uint16(0x001)
@@ -111,6 +114,12 @@ func parseRDPSecondaryOrder(data []byte, state *rdpPrimaryOrderState, sessionBPP
 		err = parseRDPCacheBitmapRev2(body, extraFlags, orderType, sessionBPP, state)
 	case rdpCacheBitmapCompressedRev3:
 		err = parseRDPCacheBitmapRev3(body, extraFlags, sessionBPP, state)
+	case rdpCacheColorTable, rdpCacheGlyph, rdpCacheBrush:
+		// These secondary caches are not consumed by the primary orders we negotiate:
+		// color tables are for indexed-color sessions, glyphs for GlyphIndex, and brushes
+		// for brush-based orders. They are length-delimited and have no effect on MemBlt
+		// or Mem3Blt, so skip them without interpreting or retaining their contents.
+		return data[orderLength-1:], nil
 	default:
 		err = ErrMCSConnection
 	}

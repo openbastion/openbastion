@@ -102,6 +102,26 @@ func mcsTestRDP2x2RawBitmap() []byte {
 	}
 }
 
+func TestRDPBitmapCacheSkipsUnusedSecondaryCaches(t *testing.T) {
+	for _, orderType := range []byte{rdpCacheColorTable, rdpCacheGlyph, rdpCacheBrush} {
+		t.Run(fmt.Sprintf("type_%02x", orderType), func(t *testing.T) {
+			state := rdpPrimaryOrderState{orderType: rdpOrderDstBlt, hasOrderType: true}
+			before := state
+			order := mcsTestRDPSecondaryOrder(orderType, 0, []byte{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04})
+			if order[0] != rdpOrderStandard|rdpOrderSecondary {
+				t.Fatal("test order has invalid control flags")
+			}
+			remaining, err := parseRDPSecondaryOrder(order[1:], &state, 32)
+			if err != nil || len(remaining) != 0 {
+				t.Fatalf("remaining=%x err=%v", remaining, err)
+			}
+			if state.orderType != before.orderType || state.hasOrderType != before.hasOrderType || state.cache != nil {
+				t.Fatalf("ignored secondary cache changed state: before=%+v after=%+v", before, state)
+			}
+		})
+	}
+}
+
 func TestRDPBitmapCacheRev2ThenMemBltAcrossUpdates(t *testing.T) {
 	cacheOrder := mcsTestRDPRev2BitmapCacheOrder(7, 2, 2, mcsTestRDP2x2RawBitmap())
 	_, state, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, cacheOrder, 0, 0), 8, 8, 32, rdpPrimaryOrderState{})
@@ -170,7 +190,7 @@ func TestRDPBitmapCacheRejectsUnsupportedAndMalformedOrdersAtomically(t *testing
 	badMemBlt := mcsTestRDPMemBltOrder(0, 1, 0, 0, 2, 2, 0xf0, 0, 0) // Pattern-dependent ROP3.
 	cases := map[string][]byte{
 		"secondary control flags": append([]byte{rdpOrderStandard | rdpOrderSecondary | 0x04}, valid[1:]...),
-		"unknown secondary order": mcsTestRDPSecondaryOrder(0x07, 0, make([]byte, 20)),
+		"unknown secondary order": mcsTestRDPSecondaryOrder(0x06, 0, make([]byte, 20)),
 		"persistent key": mcsTestRDPSecondaryOrder(rdpCacheBitmapUncompressedRev2,
 			(rdpCacheBitmapRev2BitsPerPixel32<<3)|(rdpCacheBitmapRev2PersistentKey<<7), append([]byte{2, 2, 16, 0}, mcsTestRDP2x2RawBitmap()...)),
 		"unsupported depth":      mcsTestRDPSecondaryOrder(rdpCacheBitmapUncompressedRev2, 0x28, append([]byte{2, 2, 16, 0}, mcsTestRDP2x2RawBitmap()...)),
