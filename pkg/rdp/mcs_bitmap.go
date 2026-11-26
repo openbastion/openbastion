@@ -1976,6 +1976,10 @@ readUpdate:
 					if err != nil {
 						return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: Fast-Path orders: %v", ErrMCSConnection, err)
 					}
+					if ctx.Err() != nil {
+						clearRDPBitmapCacheState(&nextOrderState)
+						return RDPBitmapUpdate{}, ErrMCSConnection
+					}
 					if nextOrderState.dstBltUsed && !dstBltEnabled ||
 						nextOrderState.memBltUsed && !memBltEnabled ||
 						nextOrderState.mem3BltUsed && !mem3BltEnabled ||
@@ -1988,9 +1992,13 @@ readUpdate:
 						nextOrderState.polylineUsed && !polylineEnabled ||
 						nextOrderState.polygonSCUsed && !polygonSCEnabled ||
 						nextOrderState.ellipseSCUsed && !ellipseSCEnabled ||
-						nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled || ctx.Err() != nil {
+						nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 						clearRDPBitmapCacheState(&nextOrderState)
-						return RDPBitmapUpdate{}, fmt.Errorf("%w: Fast-Path order was not negotiated or the read was cancelled", ErrMCSConnection)
+						return RDPBitmapUpdate{}, fmt.Errorf("%w: Fast-Path order outside negotiated profile (dst=%t mem=%t mem3=%t pat=%t scr=%t multiDst=%t multiPat=%t multiScr=%t line=%t polyline=%t polygon=%t ellipse=%t multiOpaque=%t)", ErrMCSConnection,
+							nextOrderState.dstBltUsed, nextOrderState.memBltUsed, nextOrderState.mem3BltUsed,
+							nextOrderState.patBltOpaqueRectUsed, nextOrderState.scrBltUsed, nextOrderState.multiDstBltUsed,
+							nextOrderState.multiPatBltUsed, nextOrderState.multiScrBltUsed, nextOrderState.lineToUsed,
+							nextOrderState.polylineUsed, nextOrderState.polygonSCUsed, nextOrderState.ellipseSCUsed, nextOrderState.multiOpaqueRectUsed)
 					}
 					s.mu.Lock()
 					if s.transport != transport {
