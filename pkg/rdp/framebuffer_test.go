@@ -378,6 +378,43 @@ func TestRDPFramebufferAppliesPolygonSC(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferAppliesCachedBrushToPolygonCBAndEllipseCB(t *testing.T) {
+	for name, order := range map[string][]byte{
+		"polygon": mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}),
+		"ellipse": mcsTestEllipseCBOrder(1, 1, 5, 5, 9),
+	} {
+		t.Run(name, func(t *testing.T) {
+			state := mcsTestColorBrushState(7)
+			if name == "ellipse" {
+				state = mcsTestColorBrushState(9)
+			}
+			update, next, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, 32, state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if name == "polygon" && !next.polygonCBUsed || name == "ellipse" && !next.ellipseCBUsed {
+				t.Fatalf("CB usage not recorded: %+v", next)
+			}
+			fb, err := NewRDPFramebuffer(8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			frame, err := fb.Apply(update, time.Unix(62, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := png.Decode(bytes.NewReader(frame.PNG))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := color.RGBAModel.Convert(decoded.At(2, 2)).(color.RGBA)
+			if got != (color.RGBA{R: 25, G: 0x34, B: 0x56, A: 0xff}) {
+				t.Fatalf("cached brush pixel = %#v", got)
+			}
+		})
+	}
+}
+
 func TestRDPFramebufferRejectsMalformedPolygonAtomically(t *testing.T) {
 	framebuffer, err := NewRDPFramebuffer(8, 8)
 	if err != nil {

@@ -112,6 +112,8 @@ type CredSSPClientSession struct {
 	polylineEnabled         bool
 	polygonSCEnabled        bool
 	ellipseSCEnabled        bool
+	polygonCBEnabled        bool
+	ellipseCBEnabled        bool
 	multiOpaqueRectEnabled  bool
 	primaryOrderState       rdpPrimaryOrderState
 	logonNotified           bool

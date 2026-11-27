@@ -32,6 +32,8 @@ const (
 	rdpOrderSupportMemBltIndex          = 3  // TS_NEG_MEMBLT_INDEX.
 	rdpOrderSupportMem3BltIndex         = 4  // TS_NEG_MEM3BLT_INDEX.
 	rdpOrderSupportMultiOpaqueRectIndex = 18 // TS_NEG_MULTIOPAQUERECT_INDEX.
+	rdpOrderSupportPolygonCBIndex       = 21 // TS_NEG_POLYGON_CB_INDEX.
+	rdpOrderSupportEllipseCBIndex       = 26 // TS_NEG_ELLIPSE_CB_INDEX.
 	rdpOrderSupportExFlagsOffset        = 70 // orderSupportExFlags follows orderSupport and textFlags.
 	rdpOrderSupportCacheBitmapRev3      = uint16(0x0002)
 	rdpCapBrush                         = uint16(15)
@@ -147,6 +149,8 @@ func setRDPPrimaryOrderProfileLocked(s *CredSSPClientSession) {
 	s.polylineEnabled = false
 	s.polygonSCEnabled = false
 	s.ellipseSCEnabled = false
+	s.polygonCBEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
+	s.ellipseCBEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 	s.multiOpaqueRectEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 }
 
@@ -372,6 +376,8 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 		order[rdpOrderSupportOffset+rdpOrderSupportMemBltIndex] = 1
 		order[rdpOrderSupportOffset+rdpOrderSupportMem3BltIndex] = 1
 		order[rdpOrderSupportOffset+rdpOrderSupportMultiOpaqueRectIndex] = 1
+		order[rdpOrderSupportOffset+rdpOrderSupportPolygonCBIndex] = 1
+		order[rdpOrderSupportOffset+rdpOrderSupportEllipseCBIndex] = 1
 		binary.LittleEndian.PutUint16(order[34:36], 0x000a|rdpOrderFlagExtraFlags)
 		binary.LittleEndian.PutUint16(order[rdpOrderSupportExFlagsOffset:rdpOrderSupportExFlagsOffset+2], rdpOrderSupportCacheBitmapRev3)
 	}

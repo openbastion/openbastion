@@ -1402,6 +1402,119 @@ func mcsTestOrdersUpdateData(orderCount uint16, orders []byte, padA, padB byte) 
 	return append(data, orders...)
 }
 
+func mcsTestPolygonCBOrder(startX, startY int16, brushIndex byte, codedPoints []byte) []byte {
+	out := []byte{0x09, rdpOrderPolygonCB, 0xff, 0x1b}
+	var coord [2]byte
+	binary.LittleEndian.PutUint16(coord[:], uint16(startX))
+	out = append(out, coord[:]...)
+	binary.LittleEndian.PutUint16(coord[:], uint16(startY))
+	out = append(out, coord[:]...)
+	out = append(out, rdpROP2CopyPen, 0x01, 0, 0, 0, 0x11, 0x22, 0x33, 1, 0xff, 0x85, brushIndex, 3, byte(len(codedPoints)))
+	return append(out, codedPoints...)
+}
+
+func mcsTestEllipseCBOrder(left, top, right, bottom int16, brushIndex byte) []byte {
+	out := []byte{0x09, rdpOrderEllipseCB, 0xff, 0x0f}
+	for _, value := range []int16{left, top, right, bottom} {
+		var coord [2]byte
+		binary.LittleEndian.PutUint16(coord[:], uint16(value))
+		out = append(out, coord[:]...)
+	}
+	return append(out, rdpROP2CopyPen, 0x01, 0, 0, 0, 0x11, 0x22, 0x33, 1, 0xff, 0x85, brushIndex)
+}
+
+func mcsTestColorBrushState(index byte) rdpPrimaryOrderState {
+	pixels := make([]byte, 8*8*4)
+	for i := 0; i < 64; i++ {
+		pixels[i*4], pixels[i*4+1], pixels[i*4+2], pixels[i*4+3] = byte(i), 0x34, 0x56, 0xff
+	}
+	return rdpPrimaryOrderState{brushCache: &rdpBrushCacheState{
+		mono:  make(map[byte]rdpCachedBrush),
+		color: map[byte]rdpCachedBrush{index: {format: rdpBrushFormat24BPP, pixels: pixels}},
+	}}
+}
+
+func TestParseRDPOrdersUpdateDecodesPolygonCBFromCachedColorBrush(t *testing.T) {
+	state := mcsTestColorBrushState(7)
+	order := mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	update, next, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, order, 0, 0), 16, 16, 32, state)
+	if err != nil || len(update.Rectangles) != 1 || !next.polygonCBUsed {
+		t.Fatalf("PolygonCB update=%+v state=%+v err=%v", update, next, err)
+	}
+	rect := update.Rectangles[0]
+	if rect.operation != rdpBitmapRectanglePolygon || len(rect.patternPixels) != 256 || rect.polygonROP2 != rdpROP2CopyPen {
+		t.Fatalf("PolygonCB rectangle=%+v", rect)
+	}
+}
+
+func TestParseRDPOrdersUpdateDecodesEllipseCBFromCachedColorBrush(t *testing.T) {
+	state := mcsTestColorBrushState(9)
+	order := mcsTestEllipseCBOrder(1, 1, 5, 5, 9)
+	update, next, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, order, 0, 0), 16, 16, 32, state)
+	if err != nil || len(update.Rectangles) != 1 || !next.ellipseCBUsed {
+		t.Fatalf("EllipseCB update=%+v state=%+v err=%v", update, next, err)
+	}
+	rect := update.Rectangles[0]
+	if rect.operation != rdpBitmapRectangleEllipse || len(rect.patternPixels) != 256 || rect.ellipseROP2 != rdpROP2CopyPen {
+		t.Fatalf("EllipseCB rectangle=%+v", rect)
+	}
+}
+
+func TestParseRDPOrdersUpdateRejectsMalformedCachedBrushOrders(t *testing.T) {
+	polygon := mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	ellipse := mcsTestEllipseCBOrder(1, 1, 5, 5, 9)
+	cases := []struct {
+		name  string
+		order []byte
+		index byte
+	}{
+		{name: "polygon inline brush extra", order: append(append([]byte(nil), polygon...), make([]byte, 7)...), index: 7},
+		{name: "polygon unsupported brush format", order: append([]byte(nil), polygon...), index: 7},
+		{name: "polygon invalid cache index", order: append([]byte(nil), polygon...), index: 7},
+		{name: "polygon trailing bytes", order: append(append([]byte(nil), polygon...), 0), index: 7},
+		{name: "ellipse inline brush extra", order: append(append([]byte(nil), ellipse...), make([]byte, 7)...), index: 9},
+		{name: "ellipse unsupported brush format", order: append([]byte(nil), ellipse...), index: 9},
+		{name: "ellipse invalid cache index", order: append([]byte(nil), ellipse...), index: 9},
+		{name: "ellipse trailing bytes", order: append(append([]byte(nil), ellipse...), 0), index: 9},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			order := append([]byte(nil), test.order...)
+			switch test.name {
+			case "polygon inline brush extra":
+				order[3] |= 0x04 // BrushExtra field must remain absent for cached brushes.
+			case "polygon unsupported brush format":
+				order[18] = 0x81
+			case "polygon invalid cache index":
+				order[19] = 64
+			case "ellipse inline brush extra":
+				order[3] |= 0x10 // BrushExtra field must remain absent for cached brushes.
+			case "ellipse unsupported brush format":
+				order[22] = 0x81
+			case "ellipse invalid cache index":
+				order[23] = 64
+			}
+			state := mcsTestColorBrushState(test.index)
+			if _, _, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, order, 0, 0), 16, 16, 32, state); err == nil {
+				t.Fatal("malformed cached-brush order was accepted")
+			}
+		})
+	}
+}
+
+func TestParseRDPOrdersUpdateRejectsCBWithoutCachedBrush(t *testing.T) {
+	for name, order := range map[string][]byte{
+		"polygon": mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}),
+		"ellipse": mcsTestEllipseCBOrder(1, 1, 5, 5, 9),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, order, 0, 0), 16, 16, 32, rdpPrimaryOrderState{}); err == nil {
+				t.Fatal("CB order without a cached brush was accepted")
+			}
+		})
+	}
+}
+
 func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	certificate, roots, _ := rdpTestCertificate(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -2214,6 +2327,9 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		polylineEnabled         bool
 		polygonSCEnabled        bool
 		ellipseSCEnabled        bool
+		polygonCBEnabled        bool
+		ellipseCBEnabled        bool
+		cachedBrushIndex        byte
 	}{
 		{
 			name:                 "all primary orders disabled",
@@ -2278,6 +2394,16 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 			polylineEnabled:      true,
 			polygonSCEnabled:     true,
 		},
+		{
+			name:                 "PolygonCB negotiation index disabled",
+			order:                mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}),
+			primaryOrdersEnabled: true, cachedBrushIndex: 7,
+		},
+		{
+			name:                 "EllipseCB negotiation index disabled",
+			order:                mcsTestEllipseCBOrder(1, 1, 5, 5, 9),
+			primaryOrdersEnabled: true, cachedBrushIndex: 9,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -2330,8 +2456,13 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 				polylineEnabled:         test.polylineEnabled,
 				polygonSCEnabled:        test.polygonSCEnabled,
 				ellipseSCEnabled:        test.ellipseSCEnabled,
+				polygonCBEnabled:        test.polygonCBEnabled,
+				ellipseCBEnabled:        test.ellipseCBEnabled,
 				mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 				serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
+			}
+			if test.cachedBrushIndex != 0 {
+				session.primaryOrderState = mcsTestColorBrushState(test.cachedBrushIndex)
 			}
 			if update, readErr := session.ReadBitmapUpdate(context.Background(), time.Second); !errors.Is(readErr, ErrMCSConnection) || len(update.Rectangles) != 0 {
 				t.Fatalf("unnegotiated orders update = %+v, err=%v", update, readErr)

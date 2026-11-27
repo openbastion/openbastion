@@ -173,6 +173,8 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 	wantOrderSupport[rdpOrderSupportMemBltIndex] = 1
 	wantOrderSupport[rdpOrderSupportMem3BltIndex] = 1
 	wantOrderSupport[rdpOrderSupportMultiOpaqueRectIndex] = 1
+	wantOrderSupport[rdpOrderSupportPolygonCBIndex] = 1
+	wantOrderSupport[rdpOrderSupportEllipseCBIndex] = 1
 	if binary.LittleEndian.Uint16(caps[52:54]) != rdpCapOrder || binary.LittleEndian.Uint16(caps[54:56]) != 88 ||
 		binary.LittleEndian.Uint16(caps[82:84]) != 1 || binary.LittleEndian.Uint16(caps[86:88]) != (0x000a|rdpOrderFlagExtraFlags) ||
 		!bytes.Equal(caps[88:120], wantOrderSupport) ||
@@ -308,7 +310,7 @@ func TestCredSSPSessionExchangeCapabilitiesOverTLS(t *testing.T) {
 	if got.ShareID != 0x000103ea || !session.capabilitiesExchanged || session.serverCapabilities.ShareID != got.ShareID ||
 		!session.primaryOrdersEnabled || !session.dstBltEnabled || !session.patBltOpaqueRectEnabled || !session.scrBltEnabled ||
 		session.multiDstBltEnabled || session.multiPatBltEnabled || session.multiScrBltEnabled || session.lineToEnabled ||
-		session.polylineEnabled || session.polygonSCEnabled || session.ellipseSCEnabled || !session.multiOpaqueRectEnabled {
+		session.polylineEnabled || session.polygonSCEnabled || session.ellipseSCEnabled || !session.polygonCBEnabled || !session.ellipseCBEnabled || !session.multiOpaqueRectEnabled {
 		t.Fatalf("capability transition/order profile not persisted: got=%+v session=%+v", got, session)
 	}
 	got.CapabilityTypes[0] = 0xffff
@@ -529,5 +531,37 @@ func TestSessionBitsPerPixel(t *testing.T) {
 	}
 	if (*CredSSPClientSession)(nil).BitsPerPixel() != 0 {
 		t.Fatal("nil session")
+	}
+}
+
+func TestMarshalRDPClientCapabilitySetsNegotiatesCachedBrushShapesOnlyAt32BPP(t *testing.T) {
+	for _, bpp := range []uint16{15, 16, 32} {
+		t.Run(fmt.Sprintf("%d-bpp", bpp), func(t *testing.T) {
+			caps := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 720}, bpp)
+			var order []byte
+			for offset := 0; offset+4 <= len(caps); {
+				length := int(binary.LittleEndian.Uint16(caps[offset+2 : offset+4]))
+				if length < 4 || offset+length > len(caps) {
+					t.Fatalf("invalid capability framing at offset %d", offset)
+				}
+				if binary.LittleEndian.Uint16(caps[offset:offset+2]) == rdpCapOrder {
+					order = caps[offset : offset+length]
+					break
+				}
+				offset += length
+			}
+			if len(order) != 88 {
+				t.Fatalf("Order capability missing or malformed: %x", order)
+			}
+			want := byte(0)
+			if bpp == 32 {
+				want = 1
+			}
+			for _, index := range []int{rdpOrderSupportPolygonCBIndex, rdpOrderSupportEllipseCBIndex} {
+				if got := order[rdpOrderSupportOffset+index]; got != want {
+					t.Fatalf("bpp=%d orderSupport[%d]=%d, want %d", bpp, index, got, want)
+				}
+			}
+		})
 	}
 }
