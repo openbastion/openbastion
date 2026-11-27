@@ -34,8 +34,10 @@ const (
 	rdpOrderMultiScrBlt       = byte(0x11)
 	rdpOrderLineTo            = byte(0x09)
 	rdpOrderPolygonSC         = byte(0x14)
+	rdpOrderPolygonCB         = byte(0x15)
 	rdpOrderPolyline          = byte(0x16)
 	rdpOrderEllipseSC         = byte(0x19)
+	rdpOrderEllipseCB         = byte(0x1a)
 	rdpROP2Black              = byte(0x01)
 	rdpROP2NotMergePen        = byte(0x02)
 	rdpROP2MaskNotPen         = byte(0x03)
@@ -139,6 +141,8 @@ type RDPBitmapRectangle struct {
 	rop3            byte
 	patternColor    [4]byte
 	patternPixels   []byte
+	patternOriginX  int32
+	patternOriginY  int32
 }
 
 // RDPBitmapUpdate contains ordered framebuffer operations from one complete graphics update.
@@ -208,6 +212,8 @@ type rdpPrimaryOrderState struct {
 	polylineUsed         bool
 	polygonSCUsed        bool
 	ellipseSCUsed        bool
+	polygonCBUsed        bool
+	ellipseCBUsed        bool
 	multiOpaqueRectUsed  bool
 }
 
@@ -492,8 +498,134 @@ func parseRDPDstBltOrder(data []byte, control byte, state *rdpPrimaryOrderState,
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
 // DstBlt, ScrBlt, MemBlt and Mem3Blt have cached-field, delta-coordinate and clipping-bounds
-// profiles; PatBlt accepts only its bounded cached-brush/solid ROP subset. Other decoded order
-// families remain strict subsets and are not advertised until their complete profiles are implemented.
+// profiles; PatBlt accepts only its bounded cached-brush/solid ROP subset. PolygonCB and EllipseCB
+// use independent, cache-backed profiles with explicit fields and absolute coordinates. Other
+// decoded order families remain unadvertised until their negotiated profiles are implemented.
+// parseRDPPolygonCBOrder decodes the deliberately narrow cached-color-brush profile.
+// Every required field is present; BrushExtra is forbidden because the brush comes from
+// the negotiated 24-bpp cache. This avoids implicit per-order field-cache state.
+func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderState, update *RDPBitmapUpdate, totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
+	const fieldMask = uint32(0x1bff) // x/y, ROP2, fill, colors, origin, style/index, count and delta list.
+	const allowedControl = rdpOrderStandard | rdpOrderTypeChange | rdpOrderZeroFieldByteMask
+	if state == nil || update == nil || totalPixels == nil || control&^allowedControl != 0 {
+		return data, ErrMCSConnection
+	}
+	flags, rest, err := readRDPPrimaryFieldFlags(data, 13, control)
+	if err != nil || flags != fieldMask {
+		return data, ErrMCSConnection
+	}
+	data = rest
+	startX, data, err := readRDPPrimaryCoord(data, 0, false)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	startY, data, err := readRDPPrimaryCoord(data, 0, false)
+	if err != nil || len(data) < 14 {
+		return data, ErrMCSConnection
+	}
+	ropField, fillMode := data[0], data[1]
+	if ropField&0x60 != 0 || !isSupportedRDPROP2(ropField&0x1f) || fillMode != 0x01 {
+		return data, ErrMCSConnection
+	}
+	back := [4]byte{data[2], data[3], data[4], 0xff}
+	fore := [4]byte{data[5], data[6], data[7], 0xff}
+	originX, originY := int32(int8(data[8])), int32(int8(data[9]))
+	brushStyle, brushIndex := data[10], data[11]
+	if brushStyle != 0x80|rdpBrushFormat24BPP || brushIndex >= rdpBrushCacheEntries {
+		return data, ErrMCSConnection
+	}
+	count := int(data[12])
+	encodedLength := int(data[13])
+	data = data[14:]
+	if count < 2 || count > maxRDPPolygonPoints || encodedLength == 0 || encodedLength > maxRDPPolygonBytes || encodedLength > len(data) {
+		return data, ErrMCSConnection
+	}
+	if startX < 0 || startY < 0 || startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
+		return data, ErrMCSConnection
+	}
+	brush, err := cachedRDPBrush(state, rdpBrushFormat24BPP, brushIndex)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	deltas, err := decodeRDPDeltaPoints(data[:encodedLength], count, startX, startY, desktopWidth, desktopHeight)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	points := make([][2]uint16, 1, len(deltas)+1)
+	points[0] = [2]uint16{uint16(startX), uint16(startY)}
+	points = append(points, deltas...)
+	_, bounds, pixels, err := rasterizeRDPPolygon(points, fillMode, desktopWidth, desktopHeight)
+	if err != nil || len(update.Rectangles) >= maxRDPBitmapRects || pixels > maxRDPDesktopArea-*totalPixels {
+		return data, ErrMCSConnection
+	}
+	_ = fore // Cached color brushes carry their own pixels; colors remain wire-validated fields.
+	_ = back
+	update.Rectangles = append(update.Rectangles, RDPBitmapRectangle{
+		X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectanglePolygon,
+		polygonPoints: points, polygonFillMode: fillMode, polygonROP2: ropField & 0x1f,
+		patternPixels: append([]byte(nil), brush.pixels...), patternOriginX: originX, patternOriginY: originY,
+	})
+	*totalPixels += pixels
+	state.polygonCBUsed = true
+	return data[encodedLength:], nil
+}
+
+// parseRDPEllipseCBOrder decodes the same cached-color-brush profile for inclusive bounds.
+func parseRDPEllipseCBOrder(data []byte, control byte, state *rdpPrimaryOrderState, update *RDPBitmapUpdate, totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
+	const fieldMask = uint32(0x0fff) // Four coordinates, ROP2/fill/colors, brush origin/style/index; no BrushExtra.
+	const allowedControl = rdpOrderStandard | rdpOrderTypeChange | rdpOrderZeroFieldByteMask
+	if state == nil || update == nil || totalPixels == nil || control&^allowedControl != 0 {
+		return data, ErrMCSConnection
+	}
+	flags, rest, err := readRDPPrimaryFieldFlags(data, 13, control)
+	if err != nil || flags != fieldMask {
+		return data, ErrMCSConnection
+	}
+	data = rest
+	coords := [4]int32{}
+	for i := range coords {
+		coords[i], data, err = readRDPPrimaryCoord(data, 0, false)
+		if err != nil {
+			return data, ErrMCSConnection
+		}
+	}
+	if len(data) < 12 {
+		return data, ErrMCSConnection
+	}
+	ropField, fillMode := data[0], data[1]
+	if ropField&0x60 != 0 || !isSupportedRDPROP2(ropField&0x1f) || fillMode != 0x01 {
+		return data, ErrMCSConnection
+	}
+	back := [4]byte{data[2], data[3], data[4], 0xff}
+	fore := [4]byte{data[5], data[6], data[7], 0xff}
+	originX, originY := int32(int8(data[8])), int32(int8(data[9]))
+	brushStyle, brushIndex := data[10], data[11]
+	if brushStyle != 0x80|rdpBrushFormat24BPP || brushIndex >= rdpBrushCacheEntries ||
+		coords[0] < 0 || coords[1] < 0 || coords[2] < coords[0] || coords[3] < coords[1] ||
+		coords[2] >= int32(desktopWidth) || coords[3] >= int32(desktopHeight) {
+		return data, ErrMCSConnection
+	}
+	brush, err := cachedRDPBrush(state, rdpBrushFormat24BPP, brushIndex)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	left, top := uint16(coords[0]), uint16(coords[1])
+	width, height := uint16(coords[2]-coords[0]+1), uint16(coords[3]-coords[1]+1)
+	_, bounds, pixels, err := rasterizeRDPEllipse(left, top, width, height, desktopWidth, desktopHeight)
+	if err != nil || len(update.Rectangles) >= maxRDPBitmapRects || pixels > maxRDPDesktopArea-*totalPixels {
+		return data, ErrMCSConnection
+	}
+	_ = fore // Cached color brushes carry their own pixels; colors remain wire-validated fields.
+	_ = back
+	update.Rectangles = append(update.Rectangles, RDPBitmapRectangle{
+		X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectangleEllipse,
+		ellipseROP2: ropField & 0x1f, patternPixels: append([]byte(nil), brush.pixels...), patternOriginX: originX, patternOriginY: originY,
+	})
+	*totalPixels += pixels
+	state.ellipseCBUsed = true
+	return data[12:], nil
+}
+
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	return parseRDPOrdersUpdateDataAt(data, desktopWidth, desktopHeight, 32, state)
 }
@@ -572,6 +704,18 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 		if state.orderType == rdpOrderMem3Blt {
 			var parseErr error
 			data, parseErr = parseRDPMem3BltOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			if parseErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			continue
+		}
+		if state.orderType == rdpOrderPolygonCB || state.orderType == rdpOrderEllipseCB {
+			var parseErr error
+			if state.orderType == rdpOrderPolygonCB {
+				data, parseErr = parseRDPPolygonCBOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			} else {
+				data, parseErr = parseRDPEllipseCBOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			}
 			if parseErr != nil {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -1994,6 +2138,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	polylineEnabled := s.polylineEnabled
 	polygonSCEnabled := s.polygonSCEnabled
 	ellipseSCEnabled := s.ellipseSCEnabled
+	polygonCBEnabled := s.polygonCBEnabled
+	ellipseCBEnabled := s.ellipseCBEnabled
 	multiOpaqueRectEnabled := s.multiOpaqueRectEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
@@ -2133,13 +2279,16 @@ readUpdate:
 						nextOrderState.polylineUsed && !polylineEnabled ||
 						nextOrderState.polygonSCUsed && !polygonSCEnabled ||
 						nextOrderState.ellipseSCUsed && !ellipseSCEnabled ||
+						nextOrderState.polygonCBUsed && !polygonCBEnabled ||
+						nextOrderState.ellipseCBUsed && !ellipseCBEnabled ||
 						nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 						clearRDPBitmapCacheState(&nextOrderState)
-						return RDPBitmapUpdate{}, fmt.Errorf("%w: Fast-Path order outside negotiated profile (dst=%t mem=%t mem3=%t pat=%t scr=%t multiDst=%t multiPat=%t multiScr=%t line=%t polyline=%t polygon=%t ellipse=%t multiOpaque=%t)", ErrMCSConnection,
+						return RDPBitmapUpdate{}, fmt.Errorf("%w: Fast-Path order outside negotiated profile (dst=%t mem=%t mem3=%t pat=%t scr=%t multiDst=%t multiPat=%t multiScr=%t line=%t polyline=%t polygon=%t ellipse=%t polygonCB=%t ellipseCB=%t multiOpaque=%t)", ErrMCSConnection,
 							nextOrderState.dstBltUsed, nextOrderState.memBltUsed, nextOrderState.mem3BltUsed,
 							nextOrderState.patBltOpaqueRectUsed, nextOrderState.scrBltUsed, nextOrderState.multiDstBltUsed,
 							nextOrderState.multiPatBltUsed, nextOrderState.multiScrBltUsed, nextOrderState.lineToUsed,
-							nextOrderState.polylineUsed, nextOrderState.polygonSCUsed, nextOrderState.ellipseSCUsed, nextOrderState.multiOpaqueRectUsed)
+							nextOrderState.polylineUsed, nextOrderState.polygonSCUsed, nextOrderState.ellipseSCUsed,
+							nextOrderState.polygonCBUsed, nextOrderState.ellipseCBUsed, nextOrderState.multiOpaqueRectUsed)
 					}
 					s.mu.Lock()
 					if s.transport != transport {
@@ -2289,6 +2438,8 @@ readUpdate:
 		nextOrderState.polylineUsed && !polylineEnabled ||
 		nextOrderState.polygonSCUsed && !polygonSCEnabled ||
 		nextOrderState.ellipseSCUsed && !ellipseSCEnabled ||
+		nextOrderState.polygonCBUsed && !polygonCBEnabled ||
+		nextOrderState.ellipseCBUsed && !ellipseCBEnabled ||
 		nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}

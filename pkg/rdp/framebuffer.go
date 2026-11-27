@@ -335,7 +335,7 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 		if rect.operation == rdpBitmapRectanglePolygon {
 			spans, polygonBounds, polygonPixels, polygonErr := rasterizeRDPPolygon(rect.polygonPoints, rect.polygonFillMode, uint16(bounds.Dx()), uint16(bounds.Dy()))
 			if polygonErr != nil || !isSupportedRDPROP2(rect.polygonROP2) ||
-				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || rect.polygonColor[3] != 0xff ||
+				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || (len(rect.patternPixels) != 0 && len(rect.patternPixels) != 256) || (len(rect.patternPixels) == 0 && rect.polygonColor[3] != 0xff) ||
 				rect.X != polygonBounds[0] || rect.Y != polygonBounds[1] || rect.Width != polygonBounds[2] || rect.Height != polygonBounds[3] {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
@@ -345,7 +345,7 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 		if rect.operation == rdpBitmapRectangleEllipse {
 			spans, ellipseBounds, ellipsePixels, ellipseErr := rasterizeRDPEllipse(rect.X, rect.Y, rect.Width, rect.Height, uint16(bounds.Dx()), uint16(bounds.Dy()))
 			if ellipseErr != nil || !isSupportedRDPROP2(rect.ellipseROP2) ||
-				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || len(rect.polygonPoints) != 0 || rect.ellipseColor[3] != 0xff ||
+				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || len(rect.polygonPoints) != 0 || (len(rect.patternPixels) != 0 && len(rect.patternPixels) != 256) || (len(rect.patternPixels) == 0 && rect.ellipseColor[3] != 0xff) ||
 				rect.X != ellipseBounds[0] || rect.Y != ellipseBounds[1] || rect.Width != ellipseBounds[2] || rect.Height != ellipseBounds[3] {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
@@ -479,7 +479,20 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 				start := f.image.PixOffset(int(span.X), int(span.Y))
 				for x := 0; x < int(span.Width); x++ {
 					pixel := f.image.Pix[start+x*4 : start+x*4+4]
-					applyRDPROP2(pixel, rect.polygonColor, rect.polygonROP2)
+					pen := rect.polygonColor
+					if len(rect.patternPixels) != 0 {
+						patternX := (int(span.X) + x - int(rect.patternOriginX)) % 8
+						patternY := (int(span.Y) - int(rect.patternOriginY)) % 8
+						if patternX < 0 {
+							patternX += 8
+						}
+						if patternY < 0 {
+							patternY += 8
+						}
+						offset := (patternY*8 + patternX) * 4
+						copy(pen[:], rect.patternPixels[offset:offset+4])
+					}
+					applyRDPROP2(pixel, pen, rect.polygonROP2)
 				}
 			}
 		case rdpBitmapRectangleEllipse:
@@ -487,7 +500,20 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 				start := f.image.PixOffset(int(span.X), int(span.Y))
 				for x := 0; x < int(span.Width); x++ {
 					pixel := f.image.Pix[start+x*4 : start+x*4+4]
-					applyRDPROP2(pixel, rect.ellipseColor, rect.ellipseROP2)
+					pen := rect.ellipseColor
+					if len(rect.patternPixels) != 0 {
+						patternX := (int(span.X) + x - int(rect.patternOriginX)) % 8
+						patternY := (int(span.Y) - int(rect.patternOriginY)) % 8
+						if patternX < 0 {
+							patternX += 8
+						}
+						if patternY < 0 {
+							patternY += 8
+						}
+						offset := (patternY*8 + patternX) * 4
+						copy(pen[:], rect.patternPixels[offset:offset+4])
+					}
+					applyRDPROP2(pixel, pen, rect.ellipseROP2)
 				}
 			}
 		case rdpBitmapRectangleROP3:

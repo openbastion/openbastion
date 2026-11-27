@@ -173,6 +173,7 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | 18 | [ADR-0100](0100-credssp-accepte-kerberos-a-cote-de-ntlmv2-pour-les-domaines-sans-ntlm.md) | CredSSP accepte Kerberos à côté de NTLMv2, pour les domaines qui ferment NTLM | Accepté |
 | 19 | [ADR-0101](0101-le-proxy-rdp-annonce-le-pipeline-graphique-avec-des-codecs-sans-perte.md) | Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement | Accepté |
 | 20 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
+| 21 | [ADR-0146](0146-ordres-polygone-ellipse-avec-brosse-cachee-rdp.md) | PolygonCB et EllipseCB consomment une brosse couleur mise en cache, avec deux négociations indépendantes | Proposé |
 
 ### 10. Proxy base de données
 
@@ -465,3 +466,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0144](0144-activation-du-profil-patblt-et-opaquerect-rdp.md) | PatBlt et OpaqueRect partagent l’index de négociation 1, annoncé uniquement en 32 bpp | Accepté | Proxy écran RDP et VNC |
 
 | [ADR-0145](0145-negociation-de-multiopaquerect-rdp.md) | MultiOpaqueRect est négocié indépendamment, uniquement en 32 bpp | Proposé | Proxy écran RDP et VNC |
+| [ADR-0146](0146-ordres-polygone-ellipse-avec-brosse-cachee-rdp.md) | PolygonCB et EllipseCB consomment une brosse couleur mise en cache, avec deux négociations indépendantes | Proposé | Proxy écran RDP et VNC |
