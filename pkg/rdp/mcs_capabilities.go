@@ -25,18 +25,19 @@ const (
 	rdpCapPointer         = uint16(8)
 	rdpCapBitmapCacheRev2 = uint16(19)
 
-	rdpOrderSupportOffset          = 36 // TS_ORDER_CAPABILITYSET: orderSupport starts after its 36-byte fixed prefix.
-	rdpOrderSupportDstBltIndex     = 0  // TS_NEG_DSTBLT_INDEX.
-	rdpOrderSupportPatBltIndex     = 1  // TS_NEG_PATBLT_INDEX; shared by PatBlt and OpaqueRect.
-	rdpOrderSupportScrBltIndex     = 2  // TS_NEG_SCRBLT_INDEX.
-	rdpOrderSupportMemBltIndex     = 3  // TS_NEG_MEMBLT_INDEX.
-	rdpOrderSupportMem3BltIndex    = 4  // TS_NEG_MEM3BLT_INDEX.
-	rdpOrderSupportExFlagsOffset   = 70 // orderSupportExFlags follows orderSupport and textFlags.
-	rdpOrderSupportCacheBitmapRev3 = uint16(0x0002)
-	rdpCapBrush                    = uint16(15)
-	rdpBrushSupportColor8x8        = uint32(1)
-	rdpOrderFlagExtraFlags         = uint16(0x0080)
-	rdpCapInput                    = uint16(13)
+	rdpOrderSupportOffset               = 36 // TS_ORDER_CAPABILITYSET: orderSupport starts after its 36-byte fixed prefix.
+	rdpOrderSupportDstBltIndex          = 0  // TS_NEG_DSTBLT_INDEX.
+	rdpOrderSupportPatBltIndex          = 1  // TS_NEG_PATBLT_INDEX; shared by PatBlt and OpaqueRect.
+	rdpOrderSupportScrBltIndex          = 2  // TS_NEG_SCRBLT_INDEX.
+	rdpOrderSupportMemBltIndex          = 3  // TS_NEG_MEMBLT_INDEX.
+	rdpOrderSupportMem3BltIndex         = 4  // TS_NEG_MEM3BLT_INDEX.
+	rdpOrderSupportMultiOpaqueRectIndex = 18 // TS_NEG_MULTIOPAQUERECT_INDEX.
+	rdpOrderSupportExFlagsOffset        = 70 // orderSupportExFlags follows orderSupport and textFlags.
+	rdpOrderSupportCacheBitmapRev3      = uint16(0x0002)
+	rdpCapBrush                         = uint16(15)
+	rdpBrushSupportColor8x8             = uint32(1)
+	rdpOrderFlagExtraFlags              = uint16(0x0080)
+	rdpCapInput                         = uint16(13)
 
 	maxRDPCapabilitySets = 32
 	maxRDPCapabilitySize = 2048
@@ -146,7 +147,7 @@ func setRDPPrimaryOrderProfileLocked(s *CredSSPClientSession) {
 	s.polylineEnabled = false
 	s.polygonSCEnabled = false
 	s.ellipseSCEnabled = false
-	s.multiOpaqueRectEnabled = false
+	s.multiOpaqueRectEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 }
 
 func cloneRDPServerCapabilities(in RDPServerCapabilities) RDPServerCapabilities {
@@ -364,11 +365,13 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	order[rdpOrderSupportOffset+rdpOrderSupportDstBltIndex] = 1
 	order[rdpOrderSupportOffset+rdpOrderSupportScrBltIndex] = 1
 	if sessionBPP == 32 {
-		// PatBlt and OpaqueRect share TS_NEG_PATBLT_INDEX. Both strict parsers and
-		// framebuffer renderers are implemented; other order slots remain disabled.
+		// PatBlt and OpaqueRect share TS_NEG_PATBLT_INDEX. MultiOpaqueRect has
+		// its own strict parser, framebuffer renderer and independent index 18.
+		// Other order slots remain disabled.
 		order[rdpOrderSupportOffset+rdpOrderSupportPatBltIndex] = 1
 		order[rdpOrderSupportOffset+rdpOrderSupportMemBltIndex] = 1
 		order[rdpOrderSupportOffset+rdpOrderSupportMem3BltIndex] = 1
+		order[rdpOrderSupportOffset+rdpOrderSupportMultiOpaqueRectIndex] = 1
 		binary.LittleEndian.PutUint16(order[34:36], 0x000a|rdpOrderFlagExtraFlags)
 		binary.LittleEndian.PutUint16(order[rdpOrderSupportExFlagsOffset:rdpOrderSupportExFlagsOffset+2], rdpOrderSupportCacheBitmapRev3)
 	}

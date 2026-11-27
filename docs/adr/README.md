@@ -463,3 +463,5 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0143](0143-les-elements-de-maquette-sans-contrat-d-api-sont-simules-et-signales.md) | Les éléments de maquette sans contrat d'API sont simulés, signalés et isolés | Proposé | Admin UI |
 
 | [ADR-0144](0144-activation-du-profil-patblt-et-opaquerect-rdp.md) | PatBlt et OpaqueRect partagent l’index de négociation 1, annoncé uniquement en 32 bpp | Accepté | Proxy écran RDP et VNC |
+
+| [ADR-0145](0145-negociation-de-multiopaquerect-rdp.md) | MultiOpaqueRect est négocié indépendamment, uniquement en 32 bpp | Proposé | Proxy écran RDP et VNC |
