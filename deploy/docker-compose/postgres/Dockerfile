@@ -20,10 +20,19 @@ USER root
 # Fail the build unless the fixed apt packages are installed; never silently keep
 # the vulnerable versions when the security repository is unavailable.
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes --only-upgrade apt libapt-pkg6.0 \
+    && apt-get install --no-install-recommends --yes --only-upgrade \
+        apt libapt-pkg6.0 \
+        libpam-modules libpam-modules-bin libpam-runtime libpam0g \
     && apt_version="$(dpkg-query -W -f='${Version}' apt)" \
     && libapt_version="$(dpkg-query -W -f='${Version}' libapt-pkg6.0)" \
+    && pam_modules_version="$(dpkg-query -W -f='${Version}' libpam-modules)" \
+    && pam_modules_bin_version="$(dpkg-query -W -f='${Version}' libpam-modules-bin)" \
+    && pam_runtime_version="$(dpkg-query -W -f='${Version}' libpam-runtime)" \
+    && pam_version="$(dpkg-query -W -f='${Version}' libpam0g)" \
     && dpkg --compare-versions "$apt_version" ge 2.6.2 \
     && dpkg --compare-versions "$libapt_version" ge 2.6.2 \
-    && printf 'apt=%s libapt-pkg6.0=%s\n' "$apt_version" "$libapt_version" \
+    && for version in "$pam_modules_version" "$pam_modules_bin_version" "$pam_runtime_version" "$pam_version"; do \
+        dpkg --compare-versions "$version" ge 1.5.2-6+deb12u3; \
+    done \
+    && printf 'apt=%s libapt-pkg6.0=%s libpam=%s\n' "$apt_version" "$libapt_version" "$pam_version" \
     && rm -rf /var/lib/apt/lists/*
