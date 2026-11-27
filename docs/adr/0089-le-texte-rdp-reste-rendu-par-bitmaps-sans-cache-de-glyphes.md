@@ -27,6 +27,8 @@ C'est un nouveau parseur exposé à la cible, plus large que tous les ordres dé
 
 **Ce que le cache de glyphes ne changerait pas.** L'opérateur et l'enregistrement reçoivent des images PNG complètes du framebuffer du proxy (ADR-0071 §6, ADR-0070). Que le texte arrive en glyphes ou en bitmaps, l'image montrée et l'image rejouée sont les mêmes pixels. Les glyphes n'économisent que du débit entre la cible et le proxy, d'ordinaire sur le même réseau. Ce débit n'a jamais été mesuré comme un problème.
 
+**Revalidation par mesure (27 novembre 2026).** La re-mesure Windows documentée dans l'ADR-0090 (run CI `46062820587`) observe 12,5 à 51,5 Kio/s pendant la frappe et 20,3 à 68,3 Kio/s lors du repeint d'une fenêtre de texte dense, sur Windows Server 2019/2022, en 16 et 32 bpp. Aucun goulot cible → proxy n'est démontré ; la décision ci-dessous reste inchangée. Le détail, les autres profils et les limites méthodologiques figurent dans l'ADR-0090.
+
 ## Décision
 
 1. **Le texte reste rendu par bitmaps.** Le client continue de n'annoncer ni ordre de texte ni cache de glyphes. « Aucune capacité non annoncée acceptée » reste vrai : un GlyphIndex, FastIndex, FastGlyph ou Cache Glyph reçu est refusé et ferme la session, comme aujourd'hui.
