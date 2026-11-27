@@ -462,4 +462,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0143](0143-cache-de-pinceaux-rdp-et-brosses-motif-bornees.md) | Le cache de pinceaux RDP reste borné par session et n'est annoncé qu'avec ses consommateurs | Accepté | Proxy écran RDP et VNC |
 | [ADR-0143](0143-les-elements-de-maquette-sans-contrat-d-api-sont-simules-et-signales.md) | Les éléments de maquette sans contrat d'API sont simulés, signalés et isolés | Proposé | Admin UI |
 
-| [ADR-0144](0144-activation-du-profil-patblt-et-opaquerect-rdp.md) | PatBlt et OpaqueRect partagent l’index de négociation 1, annoncé uniquement en 32 bpp | Proposé | Proxy écran RDP et VNC |
+| [ADR-0144](0144-activation-du-profil-patblt-et-opaquerect-rdp.md) | PatBlt et OpaqueRect partagent l’index de négociation 1, annoncé uniquement en 32 bpp | Accepté | Proxy écran RDP et VNC |

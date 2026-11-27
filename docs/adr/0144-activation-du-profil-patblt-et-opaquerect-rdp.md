@@ -1,6 +1,6 @@
 # ADR-0144 — Activation du profil PatBlt et OpaqueRect RDP
 
-**Statut** `Proposé` · 27 novembre 2026
+**Statut** `Accepté` · 27 novembre 2026
 
 ## Contexte
 
@@ -8,7 +8,7 @@ OpenBastion décode déjà un sous-ensemble strict de `PatBlt` et `OpaqueRect` e
 
 Malgré ces implémentations et leurs tests, cet index n'est pas annoncé et le garde de session refuse donc ces ordres reçus d'un serveur. Il serait incorrect d'annoncer les autres ordres de formes ou `MultiOpaqueRect` par simple proximité : leurs index et profils restent indépendants.
 
-## Décision proposée
+## Décision
 
 1. Annoncer `TS_NEG_PATBLT_INDEX` (index 1) uniquement dans le profil 32 bpp, où les deux ordres ont un parseur borné, un rendu framebuffer et des tests dédiés.
 2. Activer le garde de session `patBltOpaqueRectEnabled` uniquement après un échange Confirm Active réussi et uniquement si la profondeur négociée est 32 bpp.
