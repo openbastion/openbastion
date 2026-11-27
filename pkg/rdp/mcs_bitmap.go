@@ -189,6 +189,7 @@ type rdpPrimaryOrderState struct {
 	orderType            byte
 	hasOrderType         bool
 	dstBltFields         [5]int32
+	scrBltFields         [7]int32
 	memBltFields         [9]int32
 	mem3BltFields        [16]int32
 	bounds               [4]int32
@@ -350,6 +351,67 @@ func clipRDPPrimaryRectangle(left, top, width, height int32, bounds *[4]int32, d
 		return 0, 0, 0, 0, false
 	}
 	return left, top, right - left + 1, bottom - top + 1, true
+}
+
+// parseRDPScrBltOrder decodes ScrBlt with cached fields, signed coordinate deltas and
+// the shared clipping rectangle. Only SRCCOPY is accepted; source coordinates are adjusted
+// when destination clipping removes pixels from the left or top edge.
+func parseRDPScrBltOrder(data []byte, control byte, state *rdpPrimaryOrderState, result *RDPBitmapUpdate,
+	totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
+	if state == nil || result == nil || totalPixels == nil ||
+		(control&rdpOrderZeroBoundsDeltas != 0 && control&rdpOrderBounds == 0) {
+		return data, ErrMCSConnection
+	}
+	flags, rest, err := readRDPPrimaryFieldFlags(data, 7, control)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	data = rest
+	var bounds *[4]int32
+	if control&rdpOrderBounds != 0 {
+		if control&rdpOrderZeroBoundsDeltas == 0 {
+			state.bounds, data, err = readRDPPrimaryBounds(data, state.bounds)
+			if err != nil {
+				return data, ErrMCSConnection
+			}
+		}
+		bounds = &state.bounds
+	}
+	delta := control&rdpOrderDeltaCoordinates != 0
+	for field := 0; field < len(state.scrBltFields); field++ {
+		if flags&(1<<field) == 0 {
+			continue
+		}
+		if field == 4 { // bRop is a byte field between the destination and source coordinates.
+			if len(data) < 1 {
+				return data, ErrMCSConnection
+			}
+			state.scrBltFields[field] = int32(data[0])
+			data = data[1:]
+			continue
+		}
+		state.scrBltFields[field], data, err = readRDPPrimaryCoord(data, state.scrBltFields[field], delta)
+		if err != nil {
+			return data, ErrMCSConnection
+		}
+	}
+	left, top, width, height := state.scrBltFields[0], state.scrBltFields[1], state.scrBltFields[2], state.scrBltFields[3]
+	if width <= 0 || height <= 0 || byte(state.scrBltFields[4]) != rdpScrBltSrcCopy ||
+		left < 0 || top < 0 || left+width > int32(desktopWidth) || top+height > int32(desktopHeight) {
+		return data, ErrMCSConnection
+	}
+	clippedLeft, clippedTop, clippedWidth, clippedHeight, visible := clipRDPPrimaryRectangle(
+		left, top, width, height, bounds, desktopWidth, desktopHeight)
+	if visible {
+		sourceX := state.scrBltFields[5] + clippedLeft - left
+		sourceY := state.scrBltFields[6] + clippedTop - top
+		if err := appendRDPPrimaryRectangle(result, totalPixels, clippedLeft, clippedTop, clippedWidth, clippedHeight,
+			desktopWidth, desktopHeight, rdpBitmapRectangleScrCopy, 0, 0, 0, sourceX, sourceY); err != nil {
+			return data, ErrMCSConnection
+		}
+	}
+	state.scrBltUsed = true
+	return data, nil
 }
 
 // parseRDPDstBltOrder decodes the complete DstBlt field profile, including cached fields, signed
@@ -526,6 +588,19 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			}
 			continue
 		}
+		if state.orderType == rdpOrderScrBlt {
+			const scrBltControlFlags = rdpOrderStandard | rdpOrderTypeChange | rdpOrderBounds |
+				rdpOrderDeltaCoordinates | rdpOrderZeroBoundsDeltas | rdpOrderZeroFieldByteMask
+			if control&^scrBltControlFlags != 0 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			var parseErr error
+			data, parseErr = parseRDPScrBltOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			if parseErr != nil {
+				return RDPBitmapUpdate{}, initialState, fmt.Errorf("ScrBlt: %w", parseErr)
+			}
+			continue
+		}
 		if control&^(rdpOrderStandard|rdpOrderTypeChange) != 0 {
 			return RDPBitmapUpdate{}, initialState, fmt.Errorf("primary order control flags=%#02x type=%#02x: %w", control, state.orderType, ErrMCSConnection)
 		}
@@ -549,26 +624,6 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
 			red, green, blue = data[8], data[9], data[10]
 			data = data[11:]
-		case rdpOrderScrBlt:
-			if len(data) < 14 || data[0] != rdpScrBltFieldMask {
-				fieldFlags := byte(0)
-				if len(data) > 0 {
-					fieldFlags = data[0]
-				}
-				return RDPBitmapUpdate{}, initialState, fmt.Errorf("ScrBlt field header: remaining=%d flags=%#02x: %w", len(data), fieldFlags, ErrMCSConnection)
-			}
-			data = data[1:]
-			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
-			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
-			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
-			if data[8] != rdpScrBltSrcCopy {
-				return RDPBitmapUpdate{}, initialState, fmt.Errorf("ScrBlt ROP=%#02x, want SRCCOPY: %w", data[8], ErrMCSConnection)
-			}
-			sourceX = int32(int16(binary.LittleEndian.Uint16(data[9:11])))
-			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
-			operation = rdpBitmapRectangleScrCopy
-			data = data[13:]
 		case rdpOrderPolyline:
 			// Strict seven-field profile: absolute start point, supported ROP2,
 			// uncached solid brush, RGB pen color and bounded delta points.
