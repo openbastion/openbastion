@@ -165,9 +165,10 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(bitmap[20:22]) != 1 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
 		t.Fatalf("client Bitmap capability = %x", bitmap)
 	}
-	// The 32-bpp profile advertises DstBlt, ScrBlt, MemBlt and Mem3Blt; all other primary slots stay zero.
+	// The 32-bpp profile advertises DstBlt, PatBlt/OpaqueRect, ScrBlt, MemBlt and Mem3Blt; all other primary slots stay zero.
 	wantOrderSupport := make([]byte, 32)
 	wantOrderSupport[rdpOrderSupportDstBltIndex] = 1
+	wantOrderSupport[rdpOrderSupportPatBltIndex] = 1
 	wantOrderSupport[rdpOrderSupportScrBltIndex] = 1
 	wantOrderSupport[rdpOrderSupportMemBltIndex] = 1
 	wantOrderSupport[rdpOrderSupportMem3BltIndex] = 1
@@ -304,7 +305,7 @@ func TestCredSSPSessionExchangeCapabilitiesOverTLS(t *testing.T) {
 		t.Fatalf("ExchangeCapabilities: %v", err)
 	}
 	if got.ShareID != 0x000103ea || !session.capabilitiesExchanged || session.serverCapabilities.ShareID != got.ShareID ||
-		!session.primaryOrdersEnabled || !session.dstBltEnabled || session.patBltOpaqueRectEnabled || !session.scrBltEnabled ||
+		!session.primaryOrdersEnabled || !session.dstBltEnabled || !session.patBltOpaqueRectEnabled || !session.scrBltEnabled ||
 		session.multiDstBltEnabled || session.multiPatBltEnabled || session.multiScrBltEnabled || session.lineToEnabled ||
 		session.polylineEnabled || session.polygonSCEnabled || session.ellipseSCEnabled || session.multiOpaqueRectEnabled {
 		t.Fatalf("capability transition/order profile not persisted: got=%+v session=%+v", got, session)
