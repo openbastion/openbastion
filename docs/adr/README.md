@@ -459,4 +459,7 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0140](0140-contrats-de-session-et-denregistrement-des-operations-postgresql.md) | Les contrats PostgreSQL séparent l’établissement de session et l’acquittement des opérations | Proposé | Proxy base de données |
 | [ADR-0141](0141-le-client-rdp-annonce-dstblt-apres-decoder-son-profil-complet.md) | Le client RDP annonce DstBlt seulement après décodage de son profil complet | Accepté | Proxy écran RDP et VNC |
 | [ADR-0142](0142-cache-bitmap-rdp-v2-v3-et-ordres-memblt.md) | Le cache bitmap RDP v2/v3 n'est annoncé qu'avec MemBlt et Mem3Blt bornés | Accepté | Proxy écran RDP et VNC |
+| [ADR-0143](0143-cache-de-pinceaux-rdp-et-brosses-motif-bornees.md) | Le cache de pinceaux RDP reste borné par session et n'est annoncé qu'avec ses consommateurs | Accepté | Proxy écran RDP et VNC |
 | [ADR-0143](0143-les-elements-de-maquette-sans-contrat-d-api-sont-simules-et-signales.md) | Les éléments de maquette sans contrat d'API sont simulés, signalés et isolés | Proposé | Admin UI |
+
+| [ADR-0144](0144-activation-du-profil-patblt-et-opaquerect-rdp.md) | PatBlt et OpaqueRect partagent l’index de négociation 1, annoncé uniquement en 32 bpp | Accepté | Proxy écran RDP et VNC |

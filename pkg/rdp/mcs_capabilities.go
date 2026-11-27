@@ -27,6 +27,7 @@ const (
 
 	rdpOrderSupportOffset          = 36 // TS_ORDER_CAPABILITYSET: orderSupport starts after its 36-byte fixed prefix.
 	rdpOrderSupportDstBltIndex     = 0  // TS_NEG_DSTBLT_INDEX.
+	rdpOrderSupportPatBltIndex     = 1  // TS_NEG_PATBLT_INDEX; shared by PatBlt and OpaqueRect.
 	rdpOrderSupportScrBltIndex     = 2  // TS_NEG_SCRBLT_INDEX.
 	rdpOrderSupportMemBltIndex     = 3  // TS_NEG_MEMBLT_INDEX.
 	rdpOrderSupportMem3BltIndex    = 4  // TS_NEG_MEM3BLT_INDEX.
@@ -136,7 +137,7 @@ func setRDPPrimaryOrderProfileLocked(s *CredSSPClientSession) {
 	s.memBltEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 	s.mem3BltEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 	s.dstBltEnabled = true
-	s.patBltOpaqueRectEnabled = false
+	s.patBltOpaqueRectEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 	s.scrBltEnabled = true
 	s.multiDstBltEnabled = false
 	s.multiPatBltEnabled = false
@@ -363,6 +364,9 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	order[rdpOrderSupportOffset+rdpOrderSupportDstBltIndex] = 1
 	order[rdpOrderSupportOffset+rdpOrderSupportScrBltIndex] = 1
 	if sessionBPP == 32 {
+		// PatBlt and OpaqueRect share TS_NEG_PATBLT_INDEX. Both strict parsers and
+		// framebuffer renderers are implemented; other order slots remain disabled.
+		order[rdpOrderSupportOffset+rdpOrderSupportPatBltIndex] = 1
 		order[rdpOrderSupportOffset+rdpOrderSupportMemBltIndex] = 1
 		order[rdpOrderSupportOffset+rdpOrderSupportMem3BltIndex] = 1
 		binary.LittleEndian.PutUint16(order[34:36], 0x000a|rdpOrderFlagExtraFlags)
