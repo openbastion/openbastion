@@ -145,7 +145,7 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 	}
 	sourceLength := int(binary.LittleEndian.Uint16(share[12:14]))
 	combinedLength := int(binary.LittleEndian.Uint16(share[14:16]))
-	if string(share[16:16+sourceLength]) != "OpenBastion" || combinedLength != 290 { // seven capability sets, including the bitmap cache and TS_MULTIFRAGMENTUPDATE
+	if string(share[16:16+sourceLength]) != "OpenBastion" || combinedLength != 298 { // eight capability sets, including bitmap cache, brush cache and TS_MULTIFRAGMENTUPDATE
 		t.Fatalf("Confirm Active descriptor/combined length invalid: %x", share[16:])
 	}
 	combined := share[16+sourceLength:]
@@ -178,10 +178,12 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(caps[140:142]) != rdpCapBitmapCacheRev2 || binary.LittleEndian.Uint16(caps[142:144]) != 40 ||
 		binary.LittleEndian.Uint16(caps[144:146]) != 0 || caps[146] != 0 || caps[147] != 1 ||
 		binary.LittleEndian.Uint32(caps[148:152]) != rdpBitmapCacheEntries ||
-		binary.LittleEndian.Uint16(caps[180:182]) != rdpCapPointer || binary.LittleEndian.Uint16(caps[184:186]) != 1 ||
-		binary.LittleEndian.Uint16(caps[190:192]) != rdpCapInput || binary.LittleEndian.Uint16(caps[194:196]) != 1 ||
-		binary.LittleEndian.Uint32(caps[202:206]) != rdpKeyboardEnhanced ||
-		binary.LittleEndian.Uint32(caps[210:214]) != rdpKeyboardFunctionKeys {
+		binary.LittleEndian.Uint16(caps[180:182]) != rdpCapBrush || binary.LittleEndian.Uint16(caps[182:184]) != 8 ||
+		binary.LittleEndian.Uint32(caps[184:188]) != rdpBrushSupportColor8x8 ||
+		binary.LittleEndian.Uint16(caps[188:190]) != rdpCapPointer || binary.LittleEndian.Uint16(caps[192:194]) != 1 ||
+		binary.LittleEndian.Uint16(caps[198:200]) != rdpCapInput || binary.LittleEndian.Uint16(caps[202:204]) != 1 ||
+		binary.LittleEndian.Uint32(caps[210:214]) != rdpKeyboardEnhanced ||
+		binary.LittleEndian.Uint32(caps[218:222]) != rdpKeyboardFunctionKeys {
 		t.Fatalf("client advertised invalid mandatory baseline capabilities: %x", caps[52:])
 	}
 }

@@ -87,6 +87,20 @@ func TestParseRDPFastPathOrdersUpdateUsesSharedOrderState(t *testing.T) {
 	if err != nil || !mem3State.mem3BltUsed || len(mem3Update.Rectangles) != 1 {
 		t.Fatalf("Fast-Path Mem3Blt update=%+v state=%+v err=%v", mem3Update, mem3State, err)
 	}
+	brushOrder := mcsTestRDPCacheBrushOrder(4, rdpBrushFormat24BPP, mcsTestRDPCompressed24BrushData())
+	brushData := mcsTestOrdersUpdateData(1, brushOrder, 0, 0)
+	fastBrushData := append(append([]byte(nil), brushData[2:4]...), brushData[6:]...)
+	brushUpdate, brushState, err := parseRDPFastPathOrdersUpdateAt(fastBrushData, 8, 8, 32, mem3State)
+	if err != nil || len(brushUpdate.Rectangles) != 0 || brushState.brushCache == nil {
+		t.Fatalf("Fast-Path Cache Brush update=%+v state=%+v err=%v", brushUpdate, brushState, err)
+	}
+	patBlt := mcsTestRDPPatBltCachedBrushOrder(0, 0, 1, 1, rdpPatBltPatCopy, rdpBrushFormat24BPP, 4, 0, 0)
+	patData := mcsTestOrdersUpdateData(1, patBlt, 0, 0)
+	fastPatData := append(append([]byte(nil), patData[2:4]...), patData[6:]...)
+	patUpdate, patState, err := parseRDPFastPathOrdersUpdateAt(fastPatData, 8, 8, 32, brushState)
+	if err != nil || len(patUpdate.Rectangles) != 1 || !patState.patBltOpaqueRectUsed {
+		t.Fatalf("Fast-Path cached PatBlt update=%+v state=%+v err=%v", patUpdate, patState, err)
+	}
 }
 
 func TestParseRDPFastPathOrdersUpdateRejectsMalformedCountsAndOrders(t *testing.T) {
