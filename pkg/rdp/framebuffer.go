@@ -230,7 +230,7 @@ func (f *RDPFramebuffer) Unchanged(update RDPBitmapUpdate) bool {
 }
 
 // Apply validates every operation before changing the framebuffer, applies
-// replacement, solid-brush, destination-only, line, polygon, ellipse and screen-copy
+// replacement, cached-brush, destination-only, line, polygon, ellipse and screen-copy
 // operations, and returns the next complete PNG frame. Sequence numbers are
 // strictly increasing and committed only after PNG encoding succeeds.
 func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (screenstream.Message, error) {
@@ -375,7 +375,8 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
 		case rdpBitmapRectangleROP3:
-			if pixels*4 != uint64(len(rect.Pixels)) || rect.patternColor[3] != 0xff {
+			if pixels*4 != uint64(len(rect.Pixels)) || rect.patternColor[3] != 0xff ||
+				(len(rect.patternPixels) != 0 && pixels*4 != uint64(len(rect.patternPixels))) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
 		case rdpBitmapRectangleLine:
@@ -496,7 +497,11 @@ func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, enco
 				for x := 0; x < int(rect.Width); x++ {
 					dst := f.image.Pix[destinationStart+x*4 : destinationStart+x*4+4]
 					src := rect.Pixels[sourceStart+x*4 : sourceStart+x*4+4]
-					applyRDPROP3(dst, src, rect.patternColor, rect.rop3)
+					pattern := rect.patternColor
+					if len(rect.patternPixels) != 0 {
+						copy(pattern[:], rect.patternPixels[sourceStart+x*4:sourceStart+x*4+4])
+					}
+					applyRDPROP3(dst, src, pattern, rect.rop3)
 				}
 			}
 		case rdpBitmapRectangleScrCopy:

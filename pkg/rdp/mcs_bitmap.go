@@ -116,8 +116,8 @@ const (
 )
 
 // RDPBitmapRectangle is one ordered framebuffer operation from a server graphics
-// update. Pixels is tightly packed RGBA for replacement, source-bitmap ROP3, and
-// solid-brush pattern operations; line, polygon and ellipse operations carry bounded geometry.
+// update. Pixels is tightly packed RGBA for replacement, source-bitmap ROP3 and
+// pattern operations; patternPixels optionally supplies a cached brush tile.
 type RDPBitmapRectangle struct {
 	X               uint16
 	Y               uint16
@@ -138,6 +138,7 @@ type RDPBitmapRectangle struct {
 	ellipseROP2     byte
 	rop3            byte
 	patternColor    [4]byte
+	patternPixels   []byte
 }
 
 // RDPBitmapUpdate contains ordered framebuffer operations from one complete graphics update.
@@ -194,6 +195,7 @@ type rdpPrimaryOrderState struct {
 	mem3BltFields        [16]int32
 	bounds               [4]int32
 	cache                *rdpBitmapCacheState
+	brushCache           *rdpBrushCacheState
 	dstBltUsed           bool
 	memBltUsed           bool
 	mem3BltUsed          bool
@@ -489,9 +491,9 @@ func parseRDPDstBltOrder(data []byte, control byte, state *rdpPrimaryOrderState,
 }
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// DstBlt, MemBlt and Mem3Blt have cached-field, delta-coordinate and clipping-bounds profiles.
-// The other decoded order families remain strict subsets and are not advertised until their
-// complete profiles are implemented.
+// DstBlt, ScrBlt, MemBlt and Mem3Blt have cached-field, delta-coordinate and clipping-bounds
+// profiles; PatBlt accepts only its bounded cached-brush/solid ROP subset. Other decoded order
+// families remain strict subsets and are not advertised until their complete profiles are implemented.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	return parseRDPOrdersUpdateDataAt(data, desktopWidth, desktopHeight, 32, state)
 }
@@ -607,6 +609,10 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 		var left, top, width, height int32
 		var red, green, blue byte
 		var sourceX, sourceY int32
+		var patternBrush *rdpCachedBrush
+		var brushOriginX, brushOriginY int32
+		var invertBrush bool
+		var brushBackColor [4]byte
 		var multiRects [][4]int32
 		var linePoints [][2]uint16
 		var lineColor [4]byte
@@ -900,9 +906,13 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			multiRects = decodedRects
 			data = data[12+encodedLength:]
 		case rdpOrderPatBlt:
-			// This strict form is the normative 0x027f example: four absolute
-			// coordinates, PATCOPY, both colors, and a non-cached solid brush.
-			if len(data) < 18 || binary.LittleEndian.Uint16(data[:2]) != rdpPatBltFieldMask {
+			// The base profile carries coordinates, ROP, colors and BrushStyle. Optional
+			// brush origins and BrushHatch are accepted only for a cached brush.
+			if len(data) < 18 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			fieldMask := binary.LittleEndian.Uint16(data[:2])
+			if fieldMask&rdpPatBltFieldMask != rdpPatBltFieldMask || fieldMask&^uint16(0x07ff) != 0 {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			data = data[2:]
@@ -911,11 +921,48 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
 			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
 			rop := data[8]
-			// BackColor is present for wire compatibility. Both accepted ROPs
-			// use the solid brush's ForeColor; neither reads BackColor.
-			red, green, blue = data[12], data[13], data[14]
-			brushStyle := data[15]
-			if brushStyle != rdpPatBltSolidBrush {
+			backColor := [4]byte{data[9], data[10], data[11], 0xff}
+			brushBackColor = backColor
+			foreColor := [4]byte{data[12], data[13], data[14], 0xff}
+			red, green, blue = foreColor[0], foreColor[1], foreColor[2]
+			offset := 15
+			if fieldMask&(1<<7) != 0 {
+				if len(data) <= offset {
+					return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				}
+				brushOriginX = int32(int8(data[offset]))
+				offset++
+			}
+			if fieldMask&(1<<8) != 0 {
+				if len(data) <= offset {
+					return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				}
+				brushOriginY = int32(int8(data[offset]))
+				offset++
+			}
+			if len(data) <= offset {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			brushStyle := data[offset]
+			offset++
+			if brushStyle == rdpPatBltSolidBrush {
+				if fieldMask&(1<<10) != 0 {
+					if len(data) <= offset || data[offset] != 0 {
+						return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+					}
+					offset++
+				}
+			} else if brushStyle&0x80 != 0 {
+				if brushStyle&0x70 != 0 || fieldMask&(1<<10) == 0 || len(data) <= offset {
+					return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				}
+				cached, brushErr := cachedRDPBrush(&state, brushStyle&0x0f, data[offset])
+				if brushErr != nil {
+					return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				}
+				patternBrush = &cached
+				offset++
+			} else {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			switch rop {
@@ -929,11 +976,15 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 				operation = rdpBitmapRectanglePatOr
 			case rdpPatBltNotPatCopy:
 				operation = rdpBitmapRectangleReplace
-				red, green, blue = ^red, ^green, ^blue
+				if patternBrush == nil {
+					red, green, blue = ^red, ^green, ^blue
+				} else {
+					invertBrush = true
+				}
 			default:
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
-			data = data[16:]
+			data = data[offset:]
 		default:
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
@@ -961,6 +1012,28 @@ func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessio
 			if err := appendRDPPrimaryRectangle(&result, &totalPixels, bounds[0], bounds[1], bounds[2], bounds[3],
 				desktopWidth, desktopHeight, operation, red, green, blue, rectSourceX, rectSourceY); err != nil {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			if patternBrush != nil {
+				foreground := [4]byte{red, green, blue, 0xff}
+				background := [4]byte{}
+				// PatBlt BackColor is retained in the wire order; for monochrome brushes
+				// it supplies the zero-bit color, while color brushes ignore both colors.
+				if patternBrush.format == rdpBrushFormat1BPP {
+					// BackColor is parsed from the PatBlt field block below and retained in this order's state.
+					background = brushBackColor
+				}
+				pattern, patternErr := expandRDPBrushPattern(*patternBrush, foreground, background, bounds[0], bounds[1], bounds[2], bounds[3], brushOriginX, brushOriginY)
+				if patternErr != nil {
+					return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				}
+				if invertBrush {
+					for i := 0; i < len(pattern); i += 4 {
+						pattern[i], pattern[i+1], pattern[i+2] = ^pattern[i], ^pattern[i+1], ^pattern[i+2]
+					}
+				}
+				last := &result.Rectangles[len(result.Rectangles)-1]
+				clear(last.Pixels)
+				last.Pixels = pattern
 			}
 		}
 		switch state.orderType {

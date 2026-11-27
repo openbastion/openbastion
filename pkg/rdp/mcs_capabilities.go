@@ -32,6 +32,8 @@ const (
 	rdpOrderSupportMem3BltIndex    = 4  // TS_NEG_MEM3BLT_INDEX.
 	rdpOrderSupportExFlagsOffset   = 70 // orderSupportExFlags follows orderSupport and textFlags.
 	rdpOrderSupportCacheBitmapRev3 = uint16(0x0002)
+	rdpCapBrush                    = uint16(15)
+	rdpBrushSupportColor8x8        = uint32(1)
 	rdpOrderFlagExtraFlags         = uint16(0x0080)
 	rdpCapInput                    = uint16(13)
 
@@ -378,6 +380,13 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 		binary.LittleEndian.PutUint32(bitmapCache[8:12], rdpBitmapCacheEntries)
 		caps = append(caps, bitmapCache...)
 		clear(bitmapCache)
+
+		brush := make([]byte, 8)
+		binary.LittleEndian.PutUint16(brush[:2], rdpCapBrush)
+		binary.LittleEndian.PutUint16(brush[2:4], uint16(len(brush)))
+		binary.LittleEndian.PutUint32(brush[4:8], rdpBrushSupportColor8x8)
+		caps = append(caps, brush...)
+		clear(brush)
 	}
 
 	pointer := make([]byte, 10)
@@ -421,7 +430,7 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 }
 
 // rdpClientCapabilitySetCount is the 32-bpp baseline number of sets when no channel is announced.
-const rdpClientCapabilitySetCount = 7 // Includes the revision-2 bitmap cache set.
+const rdpClientCapabilitySetCount = 8 // Includes the revision-2 bitmap cache and brush capability sets.
 
 // rdpClientCapabilitySetCountFor retains the 32-bpp default and adds the virtual-channel set when
 // one is announced. Confirm Active uses the depth-specific variant below.
@@ -432,7 +441,7 @@ func rdpClientCapabilitySetCountFor(settings MCSClientSettings) uint16 {
 func rdpClientCapabilitySetCountForDepth(settings MCSClientSettings, sessionBPP uint16) uint16 {
 	count := uint16(6) // general, bitmap, order, pointer, input, multifragment
 	if sessionBPP == 32 {
-		count++ // revision-2 bitmap cache
+		count += 2 // revision-2 bitmap cache and brush capability
 	}
 	if len(rdpStaticChannelNames(settings)) > 0 {
 		count++ // virtual channel

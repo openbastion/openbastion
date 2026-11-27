@@ -23,6 +23,74 @@ func mcsTestRDPSecondaryOrder(orderType byte, extraFlags uint16, body []byte) []
 	return append(out, body...)
 }
 
+func mcsTestRDPCacheBrushOrder(index, format byte, brushData []byte) []byte {
+	body := []byte{index, format, 8, 8, 0, byte(len(brushData))}
+	body = append(body, brushData...)
+	return mcsTestRDPSecondaryOrder(rdpCacheBrush, 0, body)
+}
+
+func TestRDPCacheBrushMonoAndColor(t *testing.T) {
+	t.Run("mono", func(t *testing.T) {
+		state := rdpPrimaryOrderState{}
+		data := []byte{0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01}
+		order := mcsTestRDPCacheBrushOrder(7, rdpBrushFormat1BPP, data)
+		remaining, err := parseRDPSecondaryOrder(order[1:], &state, 32)
+		if err != nil || len(remaining) != 0 {
+			t.Fatalf("remaining=%x err=%v", remaining, err)
+		}
+		brush, err := cachedRDPBrush(&state, rdpBrushFormat1BPP, 7)
+		if err != nil || !bytes.Equal(brush.pixels, data) {
+			t.Fatalf("brush=%+v err=%v", brush, err)
+		}
+	})
+	t.Run("compressed_24bpp", func(t *testing.T) {
+		state := rdpPrimaryOrderState{}
+		data := make([]byte, 28)
+		for row := 0; row < 8; row++ {
+			data[row*2], data[row*2+1] = 0x1b, 0x1b
+		}
+		copy(data[16:], []byte{0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0})
+		order := mcsTestRDPCacheBrushOrder(3, rdpBrushFormat24BPP, data)
+		remaining, err := parseRDPSecondaryOrder(order[1:], &state, 32)
+		if err != nil || len(remaining) != 0 {
+			t.Fatalf("remaining=%x err=%v", remaining, err)
+		}
+		brush, err := cachedRDPBrush(&state, rdpBrushFormat24BPP, 3)
+		if err != nil || len(brush.pixels) != 256 {
+			t.Fatalf("brush=%+v err=%v", brush, err)
+		}
+		if got := brush.pixels[:4]; !bytes.Equal(got, []byte{0x10, 0x20, 0x30, 0xff}) {
+			t.Fatalf("first decoded pixel=%x", got)
+		}
+	})
+}
+
+func TestRDPCacheBrushRejectsMalformedOrders(t *testing.T) {
+	valid := mcsTestRDPCacheBrushOrder(1, rdpBrushFormat1BPP, make([]byte, 8))
+	tests := map[string][]byte{
+		"index":              mcsTestRDPCacheBrushOrder(64, rdpBrushFormat1BPP, make([]byte, 8)),
+		"unsupported_format": mcsTestRDPCacheBrushOrder(1, 6, make([]byte, 8)),
+		"short_mono":         mcsTestRDPCacheBrushOrder(1, rdpBrushFormat1BPP, make([]byte, 7)),
+		"dimensions":         append([]byte(nil), valid...),
+		"trailing_data":      append(append([]byte(nil), valid...), 0),
+	}
+	tests["dimensions"][9] = 7
+	encoded := binary.LittleEndian.Uint16(tests["trailing_data"][1:3])
+	binary.LittleEndian.PutUint16(tests["trailing_data"][1:3], encoded+1)
+	for name, order := range tests {
+		t.Run(name, func(t *testing.T) {
+			state := rdpPrimaryOrderState{}
+			_, err := parseRDPSecondaryOrder(order[1:], &state, 32)
+			if err == nil {
+				t.Fatal("malformed brush order accepted")
+			}
+			if state.brushCache != nil {
+				t.Fatal("malformed order mutated cache")
+			}
+		})
+	}
+}
+
 func mcsTestRDPRev2BitmapCacheOrder(index uint16, width, height uint16, pixels []byte) []byte {
 	body := append(mcsTestRDPUnsigned16(width), mcsTestRDPUnsigned16(height)...)
 	body = append(body, mcsTestRDPUnsigned32(uint32(len(pixels)))...)
@@ -102,8 +170,232 @@ func mcsTestRDP2x2RawBitmap() []byte {
 	}
 }
 
+func mcsTestRDPPatBltCachedBrushOrder(left, top, width, height int16, rop, brushFormat, brushIndex byte, brushOriginX, brushOriginY int8) []byte {
+	fieldMask := uint16(0x067f)
+	if brushOriginX != 0 {
+		fieldMask |= 1 << 7
+	}
+	if brushOriginY != 0 {
+		fieldMask |= 1 << 8
+	}
+	out := []byte{rdpOrderStandard | rdpOrderTypeChange, rdpOrderPatBlt}
+	out = binary.LittleEndian.AppendUint16(out, fieldMask)
+	for _, value := range []int16{left, top, width, height} {
+		out = binary.LittleEndian.AppendUint16(out, uint16(value))
+	}
+	out = append(out, rop)
+	out = append(out, 0x00, 0x00, 0xff) // BackColor blue.
+	out = append(out, 0xff, 0x00, 0x00) // ForeColor red.
+	if fieldMask&(1<<7) != 0 {
+		out = append(out, byte(brushOriginX))
+	}
+	if fieldMask&(1<<8) != 0 {
+		out = append(out, byte(brushOriginY))
+	}
+	out = append(out, 0x80|brushFormat, brushIndex)
+	return out
+}
+
+func mcsTestRDPMem3BltCachedBrushOrder(cacheIndex uint16, left, top, width, height int16, brushFormat, brushIndex byte) []byte {
+	out := []byte{rdpOrderStandard | rdpOrderTypeChange, rdpOrderMem3Blt, 0xff, 0xbf, 0x00}
+	out = binary.LittleEndian.AppendUint16(out, 0) // bitmap cache ID
+	for _, value := range []int16{left, top, width, height} {
+		out = binary.LittleEndian.AppendUint16(out, uint16(value))
+	}
+	out = append(out, 0xf0)                               // PATCOPY
+	out = binary.LittleEndian.AppendUint16(out, 0)        // source X
+	out = binary.LittleEndian.AppendUint16(out, 0)        // source Y
+	out = append(out, 0x00, 0x00, 0xff)                   // BackColor blue.
+	out = append(out, 0xff, 0x00, 0x00)                   // ForeColor red.
+	out = append(out, 0, 0, 0x80|brushFormat, brushIndex) // origin, cached BrushStyle, BrushHatch
+	return binary.LittleEndian.AppendUint16(out, cacheIndex)
+}
+
+func mcsTestRDPCompressed24BrushData() []byte {
+	data := make([]byte, 28)
+	for row := 0; row < 8; row++ {
+		data[row*2], data[row*2+1] = 0x00, 0x00
+	}
+	copy(data[16:], []byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc})
+	return data
+}
+
+func TestRDPPatBltUsesCachedColorBrush(t *testing.T) {
+	cache := mcsTestRDPCacheBrushOrder(4, rdpBrushFormat24BPP, mcsTestRDPCompressed24BrushData())
+	pat := mcsTestRDPPatBltCachedBrushOrder(1, 2, 4, 3, rdpPatBltPatCopy, rdpBrushFormat24BPP, 4, 0, 0)
+	orders := append(cache, pat...)
+	update, state, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(2, orders, 0, 0), 8, 8, 32, rdpPrimaryOrderState{})
+	if err != nil || state.brushCache == nil || len(update.Rectangles) != 1 {
+		t.Fatalf("update=%+v state=%+v err=%v", update, state, err)
+	}
+	fb, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fb.Draw(update); err != nil {
+		t.Fatal(err)
+	}
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	offset := fb.image.PixOffset(1, 2)
+	if got := fb.image.Pix[offset : offset+4]; !bytes.Equal(got, []byte{0x11, 0x22, 0x33, 0xff}) {
+		t.Fatalf("cached brush pixel=%x", got)
+	}
+}
+
+func TestRDPPatBltCachedBrushROPVariants(t *testing.T) {
+	tests := []struct {
+		name string
+		rop  byte
+		want [4]byte
+	}{
+		{name: "patcopy", rop: rdpPatBltPatCopy, want: [4]byte{0x11, 0x22, 0x33, 0xff}},
+		{name: "patinvert", rop: rdpPatBltPatInvert, want: [4]byte{0x01, 0x02, 0x03, 0xff}},
+		{name: "patand", rop: rdpPatBltPatAnd, want: [4]byte{0x10, 0x20, 0x30, 0xff}},
+		{name: "pator", rop: rdpPatBltPatOr, want: [4]byte{0x11, 0x22, 0x33, 0xff}},
+		{name: "notpatcopy", rop: rdpPatBltNotPatCopy, want: [4]byte{0xee, 0xdd, 0xcc, 0xff}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cache := mcsTestRDPCacheBrushOrder(4, rdpBrushFormat24BPP, mcsTestRDPCompressed24BrushData())
+			pat := mcsTestRDPPatBltCachedBrushOrder(1, 2, 1, 1, test.rop, rdpBrushFormat24BPP, 4, 0, 0)
+			orders := append(cache, pat...)
+			update, _, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(2, orders, 0, 0), 8, 8, 32, rdpPrimaryOrderState{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			fb, err := NewRDPFramebuffer(8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seed := RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{X: 1, Y: 2, Width: 1, Height: 1, Pixels: []byte{0x10, 0x20, 0x30, 0xff}}}}
+			if err := fb.Draw(seed); err != nil {
+				t.Fatal(err)
+			}
+			if err := fb.Draw(update); err != nil {
+				t.Fatal(err)
+			}
+			fb.mu.Lock()
+			defer fb.mu.Unlock()
+			offset := fb.image.PixOffset(1, 2)
+			if got := fb.image.Pix[offset : offset+4]; !bytes.Equal(got, test.want[:]) {
+				t.Fatalf("ROP result=%x want=%x", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRDPPatBltCachedBrushHonorsOrigin(t *testing.T) {
+	brushData := mcsTestRDPCompressed24BrushData()
+	brushData[15] = 0x01 // Pixel 8 (last pixel of bottom-up row) uses palette entry 1.
+	cache := mcsTestRDPCacheBrushOrder(4, rdpBrushFormat24BPP, brushData)
+	pat := mcsTestRDPPatBltCachedBrushOrder(0, 0, 2, 1, rdpPatBltPatCopy, rdpBrushFormat24BPP, 4, 1, 0)
+	update, _, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(2, append(cache, pat...), 0, 0), 8, 8, 32, rdpPrimaryOrderState{})
+	if err != nil || len(update.Rectangles) != 1 {
+		t.Fatalf("update=%+v err=%v", update, err)
+	}
+	if got := update.Rectangles[0].Pixels[:4]; !bytes.Equal(got, []byte{0x44, 0x55, 0x66, 0xff}) {
+		t.Fatalf("origin-adjusted first pixel=%x", got)
+	}
+	if got := update.Rectangles[0].Pixels[4:8]; !bytes.Equal(got, []byte{0x11, 0x22, 0x33, 0xff}) {
+		t.Fatalf("origin-adjusted second pixel=%x", got)
+	}
+}
+
+func TestRDPMem3BltUsesCachedMonoBrush(t *testing.T) {
+	bitmap := mcsTestRDPRev2BitmapCacheOrder(7, 2, 2, mcsTestRDP2x2RawBitmap())
+	brushData := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+	brush := mcsTestRDPCacheBrushOrder(2, rdpBrushFormat1BPP, brushData)
+	mem3 := mcsTestRDPMem3BltCachedBrushOrder(7, 2, 2, 2, 2, rdpBrushFormat1BPP, 2)
+	orders := append(append(bitmap, brush...), mem3...)
+	update, state, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(3, orders, 0, 0), 8, 8, 32, rdpPrimaryOrderState{})
+	if err != nil || !state.mem3BltUsed || len(update.Rectangles) != 1 {
+		t.Fatalf("update=%+v state=%+v err=%v", update, state, err)
+	}
+	fb, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fb.Draw(update); err != nil {
+		t.Fatal(err)
+	}
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	offset := fb.image.PixOffset(2, 2)
+	if got := fb.image.Pix[offset : offset+4]; !bytes.Equal(got, []byte{0xff, 0x00, 0x00, 0xff}) {
+		t.Fatalf("Mem3Blt cached mono brush pixel=%x", got)
+	}
+}
+
+func TestRDPCacheBrushRollbackAndCloneOwnership(t *testing.T) {
+	original := rdpPrimaryOrderState{}
+	cache := mcsTestRDPCacheBrushOrder(9, rdpBrushFormat1BPP, []byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11, 0x22})
+	_, committed, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, cache, 0, 0), 8, 8, 32, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone := cloneRDPPrimaryOrderState(committed)
+	clearRDPBitmapCacheState(&clone)
+	brush, err := cachedRDPBrush(&committed, rdpBrushFormat1BPP, 9)
+	if err != nil || len(brush.pixels) != 8 || brush.pixels[0] != 0xaa {
+		t.Fatalf("committed cache damaged by clone cleanup: brush=%x err=%v", brush.pixels, err)
+	}
+
+	missingReference := mcsTestRDPPatBltCachedBrushOrder(0, 0, 1, 1, rdpPatBltPatCopy, rdpBrushFormat1BPP, 10, 0, 0)
+	badUpdate := append(cache, missingReference...)
+	_, rolledBack, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(2, badUpdate, 0, 0), 8, 8, 32, original)
+	if err == nil || rolledBack.brushCache != nil {
+		t.Fatalf("malformed PDU was not rolled back: state=%+v err=%v", rolledBack, err)
+	}
+}
+
+func TestRDPCacheBrushRaw24BPP(t *testing.T) {
+	state := rdpPrimaryOrderState{}
+	data := make([]byte, 192)
+	for i := 0; i < 64; i++ {
+		data[i*3], data[i*3+1], data[i*3+2] = byte(i), byte(i+1), byte(i+2)
+	}
+	order := mcsTestRDPCacheBrushOrder(1, rdpBrushFormat24BPP, data)
+	if _, err := parseRDPSecondaryOrder(order[1:], &state, 32); err != nil {
+		t.Fatal(err)
+	}
+	brush, err := cachedRDPBrush(&state, rdpBrushFormat24BPP, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := brush.pixels[(7*8)*4 : (7*8)*4+4]; !bytes.Equal(got, []byte{0, 1, 2, 0xff}) {
+		t.Fatalf("raw color brush first wire pixel=%x", got)
+	}
+}
+
+func TestRDPCacheBrushRequiresNegotiated32BPPProfile(t *testing.T) {
+	order := mcsTestRDPCacheBrushOrder(0, rdpBrushFormat1BPP, make([]byte, 8))
+	state := rdpPrimaryOrderState{}
+	if _, err := parseRDPSecondaryOrder(order[1:], &state, 16); err == nil || state.brushCache != nil {
+		t.Fatalf("brush cache accepted without 32-bpp capability: state=%+v err=%v", state, err)
+	}
+	if got := rdpClientCapabilitySetCountForDepth(MCSClientSettings{}, 16); got != 6 {
+		t.Fatalf("16-bpp capability count=%d, want 6 without bitmap/brush caches", got)
+	}
+	if got := rdpClientCapabilitySetCountForDepth(MCSClientSettings{}, 32); got != 8 {
+		t.Fatalf("32-bpp capability count=%d, want 8 with bitmap/brush caches", got)
+	}
+}
+
+func TestRDPMonoBrushUsesForegroundBackgroundAndOrigin(t *testing.T) {
+	brush := rdpCachedBrush{format: rdpBrushFormat1BPP, pixels: []byte{0, 0, 0, 0, 0, 0, 0, 0x80}}
+	foreground, background := [4]byte{0xff, 0, 0, 0xff}, [4]byte{0, 0, 0xff, 0xff}
+	pixels, err := expandRDPBrushPattern(brush, foreground, background, 0, 0, 3, 1, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(pixels[:4], background[:]) || !bytes.Equal(pixels[4:8], foreground[:]) || !bytes.Equal(pixels[8:12], background[:]) {
+		t.Fatalf("mono pattern/origin pixels=%x", pixels)
+	}
+}
+
 func TestRDPBitmapCacheSkipsUnusedSecondaryCaches(t *testing.T) {
-	for _, orderType := range []byte{rdpCacheColorTable, rdpCacheGlyph, rdpCacheBrush} {
+	for _, orderType := range []byte{rdpCacheColorTable, rdpCacheGlyph} {
 		t.Run(fmt.Sprintf("type_%02x", orderType), func(t *testing.T) {
 			state := rdpPrimaryOrderState{orderType: rdpOrderDstBlt, hasOrderType: true}
 			before := state
@@ -585,4 +877,17 @@ func TestRDPBitmapCacheAggregateBudgetAndReplacementAccounting(t *testing.T) {
 	if rejectedPixels[0] != 0 || state.cache.bytes != maxRDPBitmapCacheBytes {
 		t.Fatalf("rejected cache entry was retained: pixels=%v bytes=%d", rejectedPixels, state.cache.bytes)
 	}
+}
+
+func FuzzParseRDPSecondaryOrder(f *testing.F) {
+	mono := mcsTestRDPCacheBrushOrder(0, rdpBrushFormat1BPP, make([]byte, 8))
+	color := mcsTestRDPCacheBrushOrder(63, rdpBrushFormat24BPP, mcsTestRDPCompressed24BrushData())
+	f.Add(mono[1:], uint16(32))
+	f.Add(color[1:], uint16(32))
+	f.Add([]byte{0xff, 0xff, 0xff, 0xff}, uint16(16))
+	f.Fuzz(func(t *testing.T, data []byte, sessionBPP uint16) {
+		state := rdpPrimaryOrderState{}
+		_, _ = parseRDPSecondaryOrder(data, &state, sessionBPP)
+		clearRDPBitmapCacheState(&state)
+	})
 }

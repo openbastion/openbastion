@@ -15,6 +15,9 @@ const (
 	rdpCacheColorTable                    = byte(0x01)
 	rdpCacheGlyph                         = byte(0x03)
 	rdpCacheBrush                         = byte(0x07)
+	rdpBrushFormat1BPP                    = byte(0x01)
+	rdpBrushFormat24BPP                   = byte(0x05)
+	rdpBrushCacheEntries                  = 64
 	rdpCacheBitmapRev2CacheID             = uint16(0)
 	rdpCacheBitmapRev2BitsPerPixel32      = uint16(6)
 	rdpCacheBitmapRev2HeightSame          = uint16(0x001)
@@ -39,7 +42,32 @@ type rdpBitmapCacheState struct {
 	bytes   uint64
 }
 
+type rdpCachedBrush struct {
+	format byte
+	pixels []byte // 1 bpp: eight bottom-up row masks; 24 bpp: top-down canonical RGBA.
+}
+
+type rdpBrushCacheState struct {
+	mono  map[byte]rdpCachedBrush
+	color map[byte]rdpCachedBrush
+}
+
 func cloneRDPPrimaryOrderState(in rdpPrimaryOrderState) rdpPrimaryOrderState {
+	if in.cache == nil && in.brushCache == nil {
+		return in
+	}
+	if in.brushCache != nil {
+		brushes := &rdpBrushCacheState{mono: make(map[byte]rdpCachedBrush, len(in.brushCache.mono)), color: make(map[byte]rdpCachedBrush, len(in.brushCache.color))}
+		for index, brush := range in.brushCache.mono {
+			brush.pixels = append([]byte(nil), brush.pixels...)
+			brushes.mono[index] = brush
+		}
+		for index, brush := range in.brushCache.color {
+			brush.pixels = append([]byte(nil), brush.pixels...)
+			brushes.color[index] = brush
+		}
+		in.brushCache = brushes
+	}
 	if in.cache == nil {
 		return in
 	}
@@ -52,7 +80,21 @@ func cloneRDPPrimaryOrderState(in rdpPrimaryOrderState) rdpPrimaryOrderState {
 }
 
 func clearRDPBitmapCacheState(state *rdpPrimaryOrderState) {
-	if state == nil || state.cache == nil {
+	if state == nil {
+		return
+	}
+	if state.brushCache != nil {
+		for index, brush := range state.brushCache.mono {
+			clear(brush.pixels)
+			delete(state.brushCache.mono, index)
+		}
+		for index, brush := range state.brushCache.color {
+			clear(brush.pixels)
+			delete(state.brushCache.color, index)
+		}
+		state.brushCache = nil
+	}
+	if state.cache == nil {
 		return
 	}
 	for index, entry := range state.cache.entries {
@@ -114,11 +156,12 @@ func parseRDPSecondaryOrder(data []byte, state *rdpPrimaryOrderState, sessionBPP
 		err = parseRDPCacheBitmapRev2(body, extraFlags, orderType, sessionBPP, state)
 	case rdpCacheBitmapCompressedRev3:
 		err = parseRDPCacheBitmapRev3(body, extraFlags, sessionBPP, state)
-	case rdpCacheColorTable, rdpCacheGlyph, rdpCacheBrush:
+	case rdpCacheBrush:
+		err = parseRDPCacheBrush(body, extraFlags, state, sessionBPP)
+	case rdpCacheColorTable, rdpCacheGlyph:
 		// These secondary caches are not consumed by the primary orders we negotiate:
-		// color tables are for indexed-color sessions, glyphs for GlyphIndex, and brushes
-		// for brush-based orders. They are length-delimited and have no effect on MemBlt
-		// or Mem3Blt, so skip them without interpreting or retaining their contents.
+		// color tables are for indexed-color sessions and glyphs are for GlyphIndex.
+		// They are length-delimited, so skip them without interpreting or retaining data.
 		return data[orderLength-1:], nil
 	default:
 		err = ErrMCSConnection
@@ -127,6 +170,115 @@ func parseRDPSecondaryOrder(data []byte, state *rdpPrimaryOrderState, sessionBPP
 		return data, ErrMCSConnection
 	}
 	return data[orderLength-1:], nil
+}
+
+func parseRDPCacheBrush(data []byte, extraFlags uint16, state *rdpPrimaryOrderState, sessionBPP uint16) error {
+	if state == nil || sessionBPP != 32 || extraFlags != 0 || len(data) < 6 {
+		return ErrMCSConnection
+	}
+	index, format, width, height, style, dataBytes := data[0], data[1], data[2], data[3], data[4], int(data[5])
+	data = data[6:]
+	if index >= rdpBrushCacheEntries || width != 8 || height != 8 || style != 0 || dataBytes != len(data) {
+		return ErrMCSConnection
+	}
+	brush := rdpCachedBrush{format: format}
+	switch format {
+	case rdpBrushFormat1BPP:
+		if dataBytes != 8 {
+			return ErrMCSConnection
+		}
+		brush.pixels = append([]byte(nil), data...)
+	case rdpBrushFormat24BPP:
+		brush.pixels = make([]byte, 8*8*4)
+		switch dataBytes {
+		case 28: // 2-bit indices, two bytes per bottom-up row, then four RGB colors.
+			for row := 0; row < 8; row++ {
+				for x := 0; x < 8; x++ {
+					packed := data[row*2+x/4]
+					paletteIndex := (packed >> uint(6-(x%4)*2)) & 0x03
+					paletteOffset := 16 + int(paletteIndex)*3
+					dst := ((7-row)*8 + x) * 4
+					brush.pixels[dst], brush.pixels[dst+1], brush.pixels[dst+2], brush.pixels[dst+3] = data[paletteOffset], data[paletteOffset+1], data[paletteOffset+2], 0xff
+				}
+			}
+		case 192: // Uncompressed bottom-up RGB triples.
+			for row := 0; row < 8; row++ {
+				for x := 0; x < 8; x++ {
+					src, dst := (row*8+x)*3, ((7-row)*8+x)*4
+					brush.pixels[dst], brush.pixels[dst+1], brush.pixels[dst+2], brush.pixels[dst+3] = data[src], data[src+1], data[src+2], 0xff
+				}
+			}
+		default:
+			return ErrMCSConnection
+		}
+	default:
+		return ErrMCSConnection
+	}
+	if state.brushCache == nil {
+		state.brushCache = &rdpBrushCacheState{mono: make(map[byte]rdpCachedBrush), color: make(map[byte]rdpCachedBrush)}
+	}
+	cache := state.brushCache.color
+	if format == rdpBrushFormat1BPP {
+		cache = state.brushCache.mono
+	}
+	if old, ok := cache[index]; ok {
+		clear(old.pixels)
+	}
+	cache[index] = brush
+	return nil
+}
+
+func expandRDPBrushPattern(brush rdpCachedBrush, foreground, background [4]byte, left, top, width, height, originX, originY int32) ([]byte, error) {
+	if width <= 0 || height <= 0 || uint64(width)*uint64(height)*4 > maxRDPDesktopArea*4 ||
+		(brush.format == rdpBrushFormat1BPP && len(brush.pixels) != 8) ||
+		(brush.format == rdpBrushFormat24BPP && len(brush.pixels) != 256) {
+		return nil, ErrMCSConnection
+	}
+	pixels := make([]byte, int(width)*int(height)*4)
+	mod8 := func(value int32) int {
+		result := int(value % 8)
+		if result < 0 {
+			result += 8
+		}
+		return result
+	}
+	for y := int32(0); y < height; y++ {
+		for x := int32(0); x < width; x++ {
+			patternX, patternY := mod8(left+x-originX), mod8(top+y-originY)
+			dst := (int(y)*int(width) + int(x)) * 4
+			if brush.format == rdpBrushFormat24BPP {
+				src := (patternY*8 + patternX) * 4
+				copy(pixels[dst:dst+4], brush.pixels[src:src+4])
+			} else {
+				color := background
+				if brush.pixels[7-patternY]&(1<<uint(7-patternX)) != 0 {
+					color = foreground
+				}
+				copy(pixels[dst:dst+4], color[:])
+			}
+		}
+	}
+	return pixels, nil
+}
+
+func cachedRDPBrush(state *rdpPrimaryOrderState, format, index byte) (rdpCachedBrush, error) {
+	if state == nil || state.brushCache == nil || index >= rdpBrushCacheEntries {
+		return rdpCachedBrush{}, ErrMCSConnection
+	}
+	var cache map[byte]rdpCachedBrush
+	switch format {
+	case rdpBrushFormat1BPP:
+		cache = state.brushCache.mono
+	case rdpBrushFormat24BPP:
+		cache = state.brushCache.color
+	default:
+		return rdpCachedBrush{}, ErrMCSConnection
+	}
+	brush, ok := cache[index]
+	if !ok || brush.format != format || (format == rdpBrushFormat1BPP && len(brush.pixels) != 8) || (format == rdpBrushFormat24BPP && len(brush.pixels) != 256) {
+		return rdpCachedBrush{}, ErrMCSConnection
+	}
+	return brush, nil
 }
 
 func parseRDPCacheBitmapRev2(data []byte, extraFlags uint16, orderType byte, sessionBPP uint16, state *rdpPrimaryOrderState) error {
@@ -313,7 +465,7 @@ func parseRDPMemBltOrder(data []byte, control byte, state *rdpPrimaryOrderState,
 	}
 	if byte(fields[5]) != 0xaa { // DSTCOPY is a protocol no-op; still validate and commit its field state.
 		if err := appendRDPCachedBitmapOperation(result, totalPixels, entry, fields[1], fields[2], fields[3], fields[4], sourceX, sourceY,
-			byte(fields[5]), [4]byte{0, 0, 0, 0xff}, bounds, desktopWidth, desktopHeight); err != nil {
+			byte(fields[5]), [4]byte{0, 0, 0, 0xff}, [4]byte{}, nil, 0, 0, bounds, desktopWidth, desktopHeight); err != nil {
 			return data, err
 		}
 	}
@@ -398,7 +550,26 @@ func parseRDPMem3BltOrder(data []byte, control byte, state *rdpPrimaryOrderState
 	entry, err := cachedRDPBitmap(state, uint16(fields[0]), uint16(fields[15]))
 	if err != nil || fields[0]>>8 != 0 || fields[1] < math.MinInt16 || fields[1] > math.MaxInt16 ||
 		fields[2] < math.MinInt16 || fields[2] > math.MaxInt16 || fields[3] <= 0 || fields[4] <= 0 ||
-		fields[5] < 0 || fields[5] > 255 || fields[12] != 0 || flags&(1<<13|1<<14) != 0 {
+		fields[5] < 0 || fields[5] > 255 || flags&(1<<14) != 0 {
+		return data, ErrMCSConnection
+	}
+	brushStyle := byte(fields[12])
+	var brush *rdpCachedBrush
+	switch {
+	case brushStyle == rdpPatBltSolidBrush:
+		if fields[13] != 0 || flags&(1<<13) != 0 {
+			return data, ErrMCSConnection
+		}
+	case brushStyle&0x80 != 0:
+		if brushStyle&0x70 != 0 || flags&(1<<13) == 0 {
+			return data, ErrMCSConnection
+		}
+		cached, brushErr := cachedRDPBrush(state, brushStyle&0x0f, byte(fields[13]))
+		if brushErr != nil {
+			return data, ErrMCSConnection
+		}
+		brush = &cached
+	default:
 		return data, ErrMCSConnection
 	}
 	sourceX := fields[6]
@@ -409,7 +580,7 @@ func parseRDPMem3BltOrder(data []byte, control byte, state *rdpPrimaryOrderState
 	pattern := [4]byte{byte(fields[9]), byte(fields[9] >> 8), byte(fields[9] >> 16), 0xff}
 	if byte(fields[5]) != 0xaa {
 		if err := appendRDPCachedBitmapOperation(result, totalPixels, entry, fields[1], fields[2], fields[3], fields[4], sourceX, sourceY,
-			byte(fields[5]), pattern, bounds, desktopWidth, desktopHeight); err != nil {
+			byte(fields[5]), pattern, [4]byte{byte(fields[8]), byte(fields[8] >> 8), byte(fields[8] >> 16), 0xff}, brush, fields[10], fields[11], bounds, desktopWidth, desktopHeight); err != nil {
 			return data, err
 		}
 	}
@@ -419,7 +590,7 @@ func parseRDPMem3BltOrder(data []byte, control byte, state *rdpPrimaryOrderState
 }
 
 func appendRDPCachedBitmapOperation(result *RDPBitmapUpdate, totalPixels *uint64, entry rdpCachedBitmap,
-	left, top, width, height, sourceX, sourceY int32, rop3 byte, pattern [4]byte, bounds *[4]int32,
+	left, top, width, height, sourceX, sourceY int32, rop3 byte, pattern, background [4]byte, brush *rdpCachedBrush, brushOriginX, brushOriginY int32, bounds *[4]int32,
 	desktopWidth, desktopHeight uint16) error {
 	clippedLeft, clippedTop, clippedWidth, clippedHeight, visible := clipRDPPrimaryRectangle(left, top, width, height, bounds, desktopWidth, desktopHeight)
 	if !visible {
@@ -442,9 +613,18 @@ func appendRDPCachedBitmapOperation(result *RDPBitmapUpdate, totalPixels *uint64
 		copy(copyPixels[dst:dst+int(clippedWidth)*4], entry.pixels[src:src+int(clippedWidth)*4])
 	}
 	*totalPixels += pixels
+	var patternPixels []byte
+	if brush != nil {
+		var err error
+		patternPixels, err = expandRDPBrushPattern(*brush, pattern, background, clippedLeft, clippedTop, clippedWidth, clippedHeight, brushOriginX, brushOriginY)
+		if err != nil {
+			clear(copyPixels)
+			return ErrMCSConnection
+		}
+	}
 	result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
 		X: uint16(clippedLeft), Y: uint16(clippedTop), Width: uint16(clippedWidth), Height: uint16(clippedHeight),
-		Pixels: copyPixels, operation: rdpBitmapRectangleROP3, rop3: rop3, patternColor: pattern,
+		Pixels: copyPixels, patternPixels: patternPixels, operation: rdpBitmapRectangleROP3, rop3: rop3, patternColor: pattern,
 	})
 	return nil
 }
