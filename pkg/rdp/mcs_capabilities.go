@@ -19,14 +19,21 @@ const (
 	rdpDemandActivePDU  = uint16(0x11)
 	rdpConfirmActivePDU = uint16(0x13)
 
-	rdpCapGeneral = uint16(1)
-	rdpCapBitmap  = uint16(2)
-	rdpCapOrder   = uint16(3)
-	rdpCapPointer = uint16(8)
+	rdpCapGeneral         = uint16(1)
+	rdpCapBitmap          = uint16(2)
+	rdpCapOrder           = uint16(3)
+	rdpCapPointer         = uint16(8)
+	rdpCapBitmapCacheRev2 = uint16(19)
 
-	rdpOrderSupportOffset      = 36 // TS_ORDER_CAPABILITYSET: orderSupport starts after its 36-byte fixed prefix.
-	rdpOrderSupportDstBltIndex = 0  // TS_NEG_DSTBLT_INDEX.
-	rdpCapInput                = uint16(13)
+	rdpOrderSupportOffset          = 36 // TS_ORDER_CAPABILITYSET: orderSupport starts after its 36-byte fixed prefix.
+	rdpOrderSupportDstBltIndex     = 0  // TS_NEG_DSTBLT_INDEX.
+	rdpOrderSupportScrBltIndex     = 2  // TS_NEG_SCRBLT_INDEX.
+	rdpOrderSupportMemBltIndex     = 3  // TS_NEG_MEMBLT_INDEX.
+	rdpOrderSupportMem3BltIndex    = 4  // TS_NEG_MEM3BLT_INDEX.
+	rdpOrderSupportExFlagsOffset   = 70 // orderSupportExFlags follows orderSupport and textFlags.
+	rdpOrderSupportCacheBitmapRev3 = uint16(0x0002)
+	rdpOrderFlagExtraFlags         = uint16(0x0080)
+	rdpCapInput                    = uint16(13)
 
 	maxRDPCapabilitySets = 32
 	maxRDPCapabilitySize = 2048
@@ -124,9 +131,11 @@ func (s *CredSSPClientSession) ExchangeCapabilities(ctx context.Context, timeout
 // experimental strict subsets.
 func setRDPPrimaryOrderProfileLocked(s *CredSSPClientSession) {
 	s.primaryOrdersEnabled = true
+	s.memBltEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
+	s.mem3BltEnabled = s.serverCapabilities.PreferredBitsPerPixel == 32
 	s.dstBltEnabled = true
 	s.patBltOpaqueRectEnabled = false
-	s.scrBltEnabled = false
+	s.scrBltEnabled = true
 	s.multiDstBltEnabled = false
 	s.multiPatBltEnabled = false
 	s.multiScrBltEnabled = false
@@ -303,7 +312,7 @@ func marshalRDPConfirmActive(capabilities RDPServerCapabilities, settings MCSCli
 	binary.LittleEndian.PutUint16(share[14:16], uint16(combinedLength))
 	copy(share[16:], source)
 	offset := 16 + len(source)
-	binary.LittleEndian.PutUint16(share[offset:offset+2], rdpClientCapabilitySetCountFor(settings))
+	binary.LittleEndian.PutUint16(share[offset:offset+2], rdpClientCapabilitySetCountForDepth(settings, sessionBPP))
 	copy(share[offset+4:], caps)
 	clear(caps)
 	packet, err := marshalMCSSendDataRequest(userID, mcsGlobalChannelID, share)
@@ -342,16 +351,34 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	caps = append(caps, bitmap...)
 	clear(bitmap)
 
-	// Advertise only the fully decoded DstBlt profile. Every other primary-order slot remains
-	// zero until its complete field, coordinate, bounds and rendering profile is implemented.
+	// DstBlt and the strict source-copy ScrBlt profile are depth-independent. At 32 bpp, add
+	// MemBlt/Mem3Blt only alongside their complete bitmap-cache profile; other slots stay zero.
 	order := make([]byte, 88)
 	binary.LittleEndian.PutUint16(order[:2], rdpCapOrder)
 	binary.LittleEndian.PutUint16(order[2:4], uint16(len(order)))
 	binary.LittleEndian.PutUint16(order[30:32], 1)      // ORD_LEVEL_1_ORDERS
-	binary.LittleEndian.PutUint16(order[34:36], 0x000a) // NEGOTIATEORDERSUPPORT | ZEROBOUNDSDELTASSUPPORT
+	binary.LittleEndian.PutUint16(order[34:36], 0x000a) // NEGOTIATEORDERSUPPORT | ZEROBOUNDSDELTASSUPPORT; EXTRA_FLAGS is added for 32 bpp.
 	order[rdpOrderSupportOffset+rdpOrderSupportDstBltIndex] = 1
+	order[rdpOrderSupportOffset+rdpOrderSupportScrBltIndex] = 1
+	if sessionBPP == 32 {
+		order[rdpOrderSupportOffset+rdpOrderSupportMemBltIndex] = 1
+		order[rdpOrderSupportOffset+rdpOrderSupportMem3BltIndex] = 1
+		binary.LittleEndian.PutUint16(order[34:36], 0x000a|rdpOrderFlagExtraFlags)
+		binary.LittleEndian.PutUint16(order[rdpOrderSupportExFlagsOffset:rdpOrderSupportExFlagsOffset+2], rdpOrderSupportCacheBitmapRev3)
+	}
 	caps = append(caps, order...)
 	clear(order)
+
+	// One in-memory revision-2 bitmap cache: 256 entries, no persistent keys and no wait list.
+	if sessionBPP == 32 {
+		bitmapCache := make([]byte, 40)
+		binary.LittleEndian.PutUint16(bitmapCache[0:2], rdpCapBitmapCacheRev2)
+		binary.LittleEndian.PutUint16(bitmapCache[2:4], uint16(len(bitmapCache)))
+		bitmapCache[7] = 1 // NumCellCaches; byte 6 is Pad2.
+		binary.LittleEndian.PutUint32(bitmapCache[8:12], rdpBitmapCacheEntries)
+		caps = append(caps, bitmapCache...)
+		clear(bitmapCache)
+	}
 
 	pointer := make([]byte, 10)
 	binary.LittleEndian.PutUint16(pointer[:2], rdpCapPointer)
@@ -393,17 +420,24 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	return caps
 }
 
-// rdpClientCapabilitySetCount is the number of sets marshalRDPClientCapabilitySets writes with no
-// channel announced.
-const rdpClientCapabilitySetCount = 6
+// rdpClientCapabilitySetCount is the 32-bpp baseline number of sets when no channel is announced.
+const rdpClientCapabilitySetCount = 7 // Includes the revision-2 bitmap cache set.
 
-// rdpClientCapabilitySetCountFor is the number of sets marshalRDPClientCapabilitySets writes for
-// settings: one more, the virtual channel's, when a channel is announced.
+// rdpClientCapabilitySetCountFor retains the 32-bpp default and adds the virtual-channel set when
+// one is announced. Confirm Active uses the depth-specific variant below.
 func rdpClientCapabilitySetCountFor(settings MCSClientSettings) uint16 {
-	if len(rdpStaticChannelNames(settings)) > 0 {
-		return rdpClientCapabilitySetCount + 1
+	return rdpClientCapabilitySetCountForDepth(settings, 32)
+}
+
+func rdpClientCapabilitySetCountForDepth(settings MCSClientSettings, sessionBPP uint16) uint16 {
+	count := uint16(6) // general, bitmap, order, pointer, input, multifragment
+	if sessionBPP == 32 {
+		count++ // revision-2 bitmap cache
 	}
-	return rdpClientCapabilitySetCount
+	if len(rdpStaticChannelNames(settings)) > 0 {
+		count++ // virtual channel
+	}
+	return count
 }
 
 func marshalMCSSendDataRequest(userID, channelID uint16, userData []byte) ([]byte, error) {

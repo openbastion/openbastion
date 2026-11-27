@@ -145,7 +145,7 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 	}
 	sourceLength := int(binary.LittleEndian.Uint16(share[12:14]))
 	combinedLength := int(binary.LittleEndian.Uint16(share[14:16]))
-	if string(share[16:16+sourceLength]) != "OpenBastion" || combinedLength != 250 { // five sets, and TS_MULTIFRAGMENTUPDATE (8 bytes)
+	if string(share[16:16+sourceLength]) != "OpenBastion" || combinedLength != 290 { // seven capability sets, including the bitmap cache and TS_MULTIFRAGMENTUPDATE
 		t.Fatalf("Confirm Active descriptor/combined length invalid: %x", share[16:])
 	}
 	combined := share[16+sourceLength:]
@@ -165,16 +165,23 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(bitmap[20:22]) != 1 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
 		t.Fatalf("client Bitmap capability = %x", bitmap)
 	}
-	// DstBlt index 0 is the only advertised primary order: its complete strict profile is decoded.
+	// The 32-bpp profile advertises DstBlt, ScrBlt, MemBlt and Mem3Blt; all other primary slots stay zero.
 	wantOrderSupport := make([]byte, 32)
 	wantOrderSupport[rdpOrderSupportDstBltIndex] = 1
+	wantOrderSupport[rdpOrderSupportScrBltIndex] = 1
+	wantOrderSupport[rdpOrderSupportMemBltIndex] = 1
+	wantOrderSupport[rdpOrderSupportMem3BltIndex] = 1
 	if binary.LittleEndian.Uint16(caps[52:54]) != rdpCapOrder || binary.LittleEndian.Uint16(caps[54:56]) != 88 ||
-		binary.LittleEndian.Uint16(caps[82:84]) != 1 || binary.LittleEndian.Uint16(caps[86:88]) != 0x000a ||
+		binary.LittleEndian.Uint16(caps[82:84]) != 1 || binary.LittleEndian.Uint16(caps[86:88]) != (0x000a|rdpOrderFlagExtraFlags) ||
 		!bytes.Equal(caps[88:120], wantOrderSupport) ||
-		binary.LittleEndian.Uint16(caps[140:142]) != rdpCapPointer || binary.LittleEndian.Uint16(caps[144:146]) != 1 ||
-		binary.LittleEndian.Uint16(caps[150:152]) != rdpCapInput || binary.LittleEndian.Uint16(caps[154:156]) != 1 ||
-		binary.LittleEndian.Uint32(caps[162:166]) != rdpKeyboardEnhanced ||
-		binary.LittleEndian.Uint32(caps[170:174]) != rdpKeyboardFunctionKeys {
+		binary.LittleEndian.Uint16(caps[122:124]) != rdpOrderSupportCacheBitmapRev3 ||
+		binary.LittleEndian.Uint16(caps[140:142]) != rdpCapBitmapCacheRev2 || binary.LittleEndian.Uint16(caps[142:144]) != 40 ||
+		binary.LittleEndian.Uint16(caps[144:146]) != 0 || caps[146] != 0 || caps[147] != 1 ||
+		binary.LittleEndian.Uint32(caps[148:152]) != rdpBitmapCacheEntries ||
+		binary.LittleEndian.Uint16(caps[180:182]) != rdpCapPointer || binary.LittleEndian.Uint16(caps[184:186]) != 1 ||
+		binary.LittleEndian.Uint16(caps[190:192]) != rdpCapInput || binary.LittleEndian.Uint16(caps[194:196]) != 1 ||
+		binary.LittleEndian.Uint32(caps[202:206]) != rdpKeyboardEnhanced ||
+		binary.LittleEndian.Uint32(caps[210:214]) != rdpKeyboardFunctionKeys {
 		t.Fatalf("client advertised invalid mandatory baseline capabilities: %x", caps[52:])
 	}
 }
@@ -295,7 +302,7 @@ func TestCredSSPSessionExchangeCapabilitiesOverTLS(t *testing.T) {
 		t.Fatalf("ExchangeCapabilities: %v", err)
 	}
 	if got.ShareID != 0x000103ea || !session.capabilitiesExchanged || session.serverCapabilities.ShareID != got.ShareID ||
-		!session.primaryOrdersEnabled || !session.dstBltEnabled || session.patBltOpaqueRectEnabled || session.scrBltEnabled ||
+		!session.primaryOrdersEnabled || !session.dstBltEnabled || session.patBltOpaqueRectEnabled || !session.scrBltEnabled ||
 		session.multiDstBltEnabled || session.multiPatBltEnabled || session.multiScrBltEnabled || session.lineToEnabled ||
 		session.polylineEnabled || session.polygonSCEnabled || session.ellipseSCEnabled || session.multiOpaqueRectEnabled {
 		t.Fatalf("capability transition/order profile not persisted: got=%+v session=%+v", got, session)

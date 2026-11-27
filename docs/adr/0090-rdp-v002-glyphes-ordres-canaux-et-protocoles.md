@@ -142,8 +142,8 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 
 ### Lot B — Ordres graphiques
 
-1. **Ordres primaires déjà décodés, à annoncer** : DstBlt, PatBlt, ScrBlt, OpaqueRect et leurs variantes Multi, LineTo, Polyline, PolygonSC, EllipseSC. Leurs profils stricts sont à élargir là où Windows en sort : bornes, deltas, `ZEROBOUNDSDELTAS`, champs omis.
-2. **Caches** : cache de pinceaux (Cache Brush), cache de bitmaps v2 et v3 (Cache Bitmap rév. 2 et 3), puis MemBlt et Mem3Blt.
+1. **Ordres primaires déjà décodés, à annoncer** : DstBlt et ScrBlt sont annoncés sur des profils bornés ; ScrBlt accepte `SRCCOPY`, champs omis, coordonnées delta et bornes partagées. PatBlt, OpaqueRect et leurs variantes Multi, LineTo, Polyline, PolygonSC, EllipseSC restent à élargir là où Windows en sort : bornes, deltas, `ZEROBOUNDSDELTAS`, champs omis.
+2. **Caches** : Cache Bitmap rév. 2/3 et MemBlt/Mem3Blt sont implémentés ensemble en profil strict 32 bpp (ADR-0142) ; le cache de pinceaux reste à faire avant les ordres qui l'exigent.
 3. **Formes avec pinceau** : PolygonCB et EllipseCB ; SaveBitmap.
 4. **Glyphes** : `TS_GLYPHCACHE_CAPABILITYSET`, Cache Glyph rév. 1 et 2, GlyphIndex, FastIndex, FastGlyph, cache de fragments.
 5. **Bitmaps hors écran** (Alternate Secondary Orders) : seulement si le lot A le justifie.

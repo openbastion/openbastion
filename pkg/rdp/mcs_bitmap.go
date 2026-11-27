@@ -110,13 +110,14 @@ const (
 	rdpBitmapRectanglePatOr
 	rdpBitmapRectangleScrCopy
 	rdpBitmapRectangleLine
+	rdpBitmapRectangleROP3
 	rdpBitmapRectanglePolygon
 	rdpBitmapRectangleEllipse
 )
 
 // RDPBitmapRectangle is one ordered framebuffer operation from a server graphics
-// update. Pixels is tightly packed RGBA for replacement and solid-brush pattern
-// operations; line, polygon and ellipse operations carry bounded geometry and color metadata.
+// update. Pixels is tightly packed RGBA for replacement, source-bitmap ROP3, and
+// solid-brush pattern operations; line, polygon and ellipse operations carry bounded geometry.
 type RDPBitmapRectangle struct {
 	X               uint16
 	Y               uint16
@@ -135,6 +136,8 @@ type RDPBitmapRectangle struct {
 	polygonROP2     byte
 	ellipseColor    [4]byte
 	ellipseROP2     byte
+	rop3            byte
+	patternColor    [4]byte
 }
 
 // RDPBitmapUpdate contains ordered framebuffer operations from one complete graphics update.
@@ -179,16 +182,21 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 	return update, err
 }
 
-// rdpPrimaryOrderState retains the connection-scoped primary order type and
-// records which negotiated order families appeared so the session can enforce
-// their independent indices. Supported profiles require every data field, so
-// no per-order field cache is needed.
+// rdpPrimaryOrderState retains connection-scoped primary field caches, shared clipping bounds,
+// the negotiated bitmap cache and the order families used by a Share Data PDU. The session commits
+// a cloned state only after every order in the PDU has been decoded and checked against negotiation.
 type rdpPrimaryOrderState struct {
 	orderType            byte
 	hasOrderType         bool
 	dstBltFields         [5]int32
+	scrBltFields         [7]int32
+	memBltFields         [9]int32
+	mem3BltFields        [16]int32
 	bounds               [4]int32
+	cache                *rdpBitmapCacheState
 	dstBltUsed           bool
+	memBltUsed           bool
+	mem3BltUsed          bool
 	patBltOpaqueRectUsed bool
 	scrBltUsed           bool
 	multiDstBltUsed      bool
@@ -208,6 +216,7 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 func parseRDPBitmapShareDataAt(userData []byte, shareID uint32, desktopWidth, desktopHeight, sessionBPP uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	if len(userData) < 18+4 || len(userData) > maxRDPBitmapReassemblyBytes || shareID == 0 ||
+		(sessionBPP != 15 && sessionBPP != 16 && sessionBPP != 32) ||
 		desktopWidth == 0 || desktopHeight == 0 || uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
 		return result, state, ErrMCSConnection
 	}
@@ -226,11 +235,8 @@ func parseRDPBitmapShareDataAt(userData []byte, shareID uint32, desktopWidth, de
 		update, err := parseRDPBitmapUpdateDataAt(payload[2:], desktopWidth, desktopHeight, sessionBPP)
 		return update, state, err
 	case rdpUpdateOrders:
-		// Order colors are 32-bpp here; at another depth they would mean other colors (ADR-0086).
-		if sessionBPP != 32 {
-			return RDPBitmapUpdate{}, state, ErrMCSConnection
-		}
-		return parseRDPOrdersUpdateData(payload[2:], desktopWidth, desktopHeight, state)
+		// DstBlt is color-depth independent; other order profiles are 32-bpp only.
+		return parseRDPOrdersUpdateDataAt(payload[2:], desktopWidth, desktopHeight, sessionBPP, state)
 	default:
 		return RDPBitmapUpdate{}, state, ErrMCSConnection
 	}
@@ -347,6 +353,67 @@ func clipRDPPrimaryRectangle(left, top, width, height int32, bounds *[4]int32, d
 	return left, top, right - left + 1, bottom - top + 1, true
 }
 
+// parseRDPScrBltOrder decodes ScrBlt with cached fields, signed coordinate deltas and
+// the shared clipping rectangle. Only SRCCOPY is accepted; source coordinates are adjusted
+// when destination clipping removes pixels from the left or top edge.
+func parseRDPScrBltOrder(data []byte, control byte, state *rdpPrimaryOrderState, result *RDPBitmapUpdate,
+	totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
+	if state == nil || result == nil || totalPixels == nil ||
+		(control&rdpOrderZeroBoundsDeltas != 0 && control&rdpOrderBounds == 0) {
+		return data, ErrMCSConnection
+	}
+	flags, rest, err := readRDPPrimaryFieldFlags(data, 7, control)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	data = rest
+	var bounds *[4]int32
+	if control&rdpOrderBounds != 0 {
+		if control&rdpOrderZeroBoundsDeltas == 0 {
+			state.bounds, data, err = readRDPPrimaryBounds(data, state.bounds)
+			if err != nil {
+				return data, ErrMCSConnection
+			}
+		}
+		bounds = &state.bounds
+	}
+	delta := control&rdpOrderDeltaCoordinates != 0
+	for field := 0; field < len(state.scrBltFields); field++ {
+		if flags&(1<<field) == 0 {
+			continue
+		}
+		if field == 4 { // bRop is a byte field between the destination and source coordinates.
+			if len(data) < 1 {
+				return data, ErrMCSConnection
+			}
+			state.scrBltFields[field] = int32(data[0])
+			data = data[1:]
+			continue
+		}
+		state.scrBltFields[field], data, err = readRDPPrimaryCoord(data, state.scrBltFields[field], delta)
+		if err != nil {
+			return data, ErrMCSConnection
+		}
+	}
+	left, top, width, height := state.scrBltFields[0], state.scrBltFields[1], state.scrBltFields[2], state.scrBltFields[3]
+	if width <= 0 || height <= 0 || byte(state.scrBltFields[4]) != rdpScrBltSrcCopy ||
+		left < 0 || top < 0 || left+width > int32(desktopWidth) || top+height > int32(desktopHeight) {
+		return data, ErrMCSConnection
+	}
+	clippedLeft, clippedTop, clippedWidth, clippedHeight, visible := clipRDPPrimaryRectangle(
+		left, top, width, height, bounds, desktopWidth, desktopHeight)
+	if visible {
+		sourceX := state.scrBltFields[5] + clippedLeft - left
+		sourceY := state.scrBltFields[6] + clippedTop - top
+		if err := appendRDPPrimaryRectangle(result, totalPixels, clippedLeft, clippedTop, clippedWidth, clippedHeight,
+			desktopWidth, desktopHeight, rdpBitmapRectangleScrCopy, 0, 0, 0, sourceX, sourceY); err != nil {
+			return data, ErrMCSConnection
+		}
+	}
+	state.scrBltUsed = true
+	return data, nil
+}
+
 // parseRDPDstBltOrder decodes the complete DstBlt field profile, including cached fields, signed
 // coordinate deltas, shared clipping bounds and the four destination-only ROP3 operations.
 func parseRDPDstBltOrder(data []byte, control byte, state *rdpPrimaryOrderState, result *RDPBitmapUpdate,
@@ -422,12 +489,26 @@ func parseRDPDstBltOrder(data []byte, control byte, state *rdpPrimaryOrderState,
 }
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// DstBlt has a complete cached-field, delta-coordinate and clipping-bounds profile. The other
-// decoded order families remain strict subsets with absolute coordinates, no clipping bounds and
-// no omitted fields; they are not advertised until their complete profiles are implemented.
+// DstBlt, MemBlt and Mem3Blt have cached-field, delta-coordinate and clipping-bounds profiles.
+// The other decoded order families remain strict subsets and are not advertised until their
+// complete profiles are implemented.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
-	var result RDPBitmapUpdate
+	return parseRDPOrdersUpdateDataAt(data, desktopWidth, desktopHeight, 32, state)
+}
+
+func parseRDPOrdersUpdateDataAt(data []byte, desktopWidth, desktopHeight, sessionBPP uint16, state rdpPrimaryOrderState) (result RDPBitmapUpdate, nextState rdpPrimaryOrderState, err error) {
 	initialState := state
+	currentOrderIndex := -1
+	currentOrderType := byte(0)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("primary order index=%d type=%#02x: %w", currentOrderIndex, currentOrderType, err)
+		}
+	}()
+	if sessionBPP != 15 && sessionBPP != 16 && sessionBPP != 32 {
+		return result, initialState, ErrMCSConnection
+	}
+	state = cloneRDPPrimaryOrderState(state)
 	if len(data) < 6 || desktopWidth == 0 || desktopHeight == 0 ||
 		uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
 		return result, initialState, ErrMCSConnection
@@ -440,6 +521,8 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 	result.Rectangles = make([]RDPBitmapRectangle, 0, orderCount)
 	var totalPixels uint64
 	for i := 0; i < orderCount; i++ {
+		currentOrderIndex = i
+		currentOrderType = state.orderType
 		if len(data) < 1 {
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
@@ -447,6 +530,17 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		data = data[1:]
 		if control&rdpOrderStandard == 0 {
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+		}
+		if control&rdpOrderSecondary != 0 {
+			if control != rdpOrderStandard|rdpOrderSecondary {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			var parseErr error
+			data, parseErr = parseRDPSecondaryOrder(data, &state, sessionBPP)
+			if parseErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			continue
 		}
 		if control&rdpOrderTypeChange != 0 {
 			if len(data) < 1 {
@@ -458,6 +552,28 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		} else if !state.hasOrderType {
 			state.orderType = rdpOrderPatBlt // Initial primary order type per MS-RDPEGDI.
 			state.hasOrderType = true
+		}
+		currentOrderType = state.orderType
+		// DstBlt is color-depth independent. All other currently supported order parsers
+		// use 32-bpp color/cache semantics and are therefore refused at 15/16 bpp.
+		if sessionBPP != 32 && state.orderType != rdpOrderDstBlt {
+			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+		}
+		if state.orderType == rdpOrderMemBlt {
+			var parseErr error
+			data, parseErr = parseRDPMemBltOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			if parseErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			continue
+		}
+		if state.orderType == rdpOrderMem3Blt {
+			var parseErr error
+			data, parseErr = parseRDPMem3BltOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			if parseErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			continue
 		}
 		if state.orderType == rdpOrderDstBlt {
 			const dstBltControlFlags = rdpOrderStandard | rdpOrderTypeChange | rdpOrderBounds |
@@ -472,8 +588,21 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			}
 			continue
 		}
+		if state.orderType == rdpOrderScrBlt {
+			const scrBltControlFlags = rdpOrderStandard | rdpOrderTypeChange | rdpOrderBounds |
+				rdpOrderDeltaCoordinates | rdpOrderZeroBoundsDeltas | rdpOrderZeroFieldByteMask
+			if control&^scrBltControlFlags != 0 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			var parseErr error
+			data, parseErr = parseRDPScrBltOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			if parseErr != nil {
+				return RDPBitmapUpdate{}, initialState, fmt.Errorf("ScrBlt: %w", parseErr)
+			}
+			continue
+		}
 		if control&^(rdpOrderStandard|rdpOrderTypeChange) != 0 {
-			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			return RDPBitmapUpdate{}, initialState, fmt.Errorf("primary order control flags=%#02x type=%#02x: %w", control, state.orderType, ErrMCSConnection)
 		}
 		var left, top, width, height int32
 		var red, green, blue byte
@@ -495,22 +624,6 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
 			red, green, blue = data[8], data[9], data[10]
 			data = data[11:]
-		case rdpOrderScrBlt:
-			if len(data) < 14 || data[0] != rdpScrBltFieldMask {
-				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
-			}
-			data = data[1:]
-			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
-			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
-			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
-			if data[8] != rdpScrBltSrcCopy {
-				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
-			}
-			sourceX = int32(int16(binary.LittleEndian.Uint16(data[9:11])))
-			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
-			operation = rdpBitmapRectangleScrCopy
-			data = data[13:]
 		case rdpOrderPolyline:
 			// Strict seven-field profile: absolute start point, supported ROP2,
 			// uncached solid brush, RGB pen color and bounded delta points.
@@ -1366,7 +1479,27 @@ func cropRDPBitmap(rgba []byte, width, destWidth, destHeight int) []byte {
 	return out
 }
 
+// parseRDPFastPathOrdersUpdateAt adapts the Fast-Path TS_FP_UPDATE_ORDERS body (numberOrders,
+// orderData) to the shared primary/secondary order decoder. Unlike slow-path TS_UPDATE_ORDERS,
+// Fast-Path has no two padding fields; the drawing-order grammar and per-share state are identical.
+func parseRDPFastPathOrdersUpdateAt(data []byte, desktopWidth, desktopHeight, sessionBPP uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
+	if len(data) < 2 {
+		return RDPBitmapUpdate{}, state, ErrMCSConnection
+	}
+	orderCount := binary.LittleEndian.Uint16(data[:2])
+	if orderCount == 0 || orderCount > maxRDPPrimaryOrders {
+		return RDPBitmapUpdate{}, state, ErrMCSConnection
+	}
+	slowPathData := make([]byte, 6+len(data)-2)
+	binary.LittleEndian.PutUint16(slowPathData[2:4], orderCount)
+	copy(slowPathData[6:], data[2:])
+	update, nextState, err := parseRDPOrdersUpdateDataAt(slowPathData, desktopWidth, desktopHeight, sessionBPP, state)
+	clear(slowPathData)
+	return update, nextState, err
+}
+
 const (
+	rdpFastPathUpdateOrders = byte(0)
 	rdpFastPathUpdateBitmap = byte(1)
 	maxRDPFastPathPacket    = 0x7fff
 )
@@ -1750,7 +1883,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		s.mu.Unlock()
 		return update, ErrMCSConnection
 	}
-	conn := s.transport.Conn
+	transport := s.transport
+	conn := transport.Conn
 	// What the target sends, counted for the measurements of ADR-0090 (lot A).
 	counted := countingReader{reader: conn, count: &s.serverBytes}
 	ioChannelID := s.mcsResponse.IOChannelID
@@ -1777,6 +1911,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	primaryOrdersEnabled := s.primaryOrdersEnabled
 	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
 	dstBltEnabled := s.dstBltEnabled
+	memBltEnabled := s.memBltEnabled
+	mem3BltEnabled := s.mem3BltEnabled
 	scrBltEnabled := s.scrBltEnabled
 	multiDstBltEnabled := s.multiDstBltEnabled
 	multiPatBltEnabled := s.multiPatBltEnabled
@@ -1807,6 +1943,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			s.mu.Lock()
 			s.closeTransportLocked()
 			s.mu.Unlock()
+			clearRDPBitmapCacheState(&orderState)
 			if !errors.Is(err, ErrMCSConnection) && !errors.Is(err, ErrSessionEnded) {
 				err = ErrMCSConnection // a described refusal keeps its description, an end says it is one
 			}
@@ -1817,6 +1954,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			s.mu.Lock()
 			s.closeTransportLocked()
 			s.mu.Unlock()
+			clearRDPBitmapCacheState(&orderState)
 			err = ErrMCSConnection
 			update = RDPBitmapUpdate{}
 			return
@@ -1892,6 +2030,57 @@ readUpdate:
 				if rdpFastPathCodeIsIgnored(code) {
 					clear(packet)
 					goto readUpdate
+				}
+				if code == rdpFastPathUpdateOrders {
+					if !primaryOrdersEnabled {
+						clear(packet)
+						clear(data)
+						return RDPBitmapUpdate{}, ErrMCSConnection
+					}
+					var nextOrderState rdpPrimaryOrderState
+					update, nextOrderState, err = parseRDPFastPathOrdersUpdateAt(data, desktopWidth, desktopHeight, sessionBPP, orderState)
+					clear(packet)
+					clear(data)
+					if err != nil {
+						return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: Fast-Path orders: %v", ErrMCSConnection, err)
+					}
+					if ctx.Err() != nil {
+						clearRDPBitmapCacheState(&nextOrderState)
+						return RDPBitmapUpdate{}, ErrMCSConnection
+					}
+					if nextOrderState.dstBltUsed && !dstBltEnabled ||
+						nextOrderState.memBltUsed && !memBltEnabled ||
+						nextOrderState.mem3BltUsed && !mem3BltEnabled ||
+						nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||
+						nextOrderState.scrBltUsed && !scrBltEnabled ||
+						nextOrderState.multiDstBltUsed && !multiDstBltEnabled ||
+						nextOrderState.multiPatBltUsed && !multiPatBltEnabled ||
+						nextOrderState.multiScrBltUsed && !multiScrBltEnabled ||
+						nextOrderState.lineToUsed && !lineToEnabled ||
+						nextOrderState.polylineUsed && !polylineEnabled ||
+						nextOrderState.polygonSCUsed && !polygonSCEnabled ||
+						nextOrderState.ellipseSCUsed && !ellipseSCEnabled ||
+						nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
+						clearRDPBitmapCacheState(&nextOrderState)
+						return RDPBitmapUpdate{}, fmt.Errorf("%w: Fast-Path order outside negotiated profile (dst=%t mem=%t mem3=%t pat=%t scr=%t multiDst=%t multiPat=%t multiScr=%t line=%t polyline=%t polygon=%t ellipse=%t multiOpaque=%t)", ErrMCSConnection,
+							nextOrderState.dstBltUsed, nextOrderState.memBltUsed, nextOrderState.mem3BltUsed,
+							nextOrderState.patBltOpaqueRectUsed, nextOrderState.scrBltUsed, nextOrderState.multiDstBltUsed,
+							nextOrderState.multiPatBltUsed, nextOrderState.multiScrBltUsed, nextOrderState.lineToUsed,
+							nextOrderState.polylineUsed, nextOrderState.polygonSCUsed, nextOrderState.ellipseSCUsed, nextOrderState.multiOpaqueRectUsed)
+					}
+					s.mu.Lock()
+					if s.transport != transport {
+						s.mu.Unlock()
+						clearRDPBitmapCacheState(&nextOrderState)
+						return RDPBitmapUpdate{}, ErrMCSConnection
+					}
+					s.primaryOrderState = nextOrderState
+					orderState = nextOrderState
+					s.mu.Unlock()
+					if len(update.Rectangles) == 0 {
+						goto readUpdate
+					}
+					return update, nil
 				}
 				// TS_UPDATE_BITMAP_DATA starts with its updateType, as in the slow path.
 				if code != rdpFastPathUpdateBitmap || len(data) < 2 || binary.LittleEndian.Uint16(data[:2]) != rdpUpdateBitmap {
@@ -2016,6 +2205,8 @@ readUpdate:
 	}
 	if ctx.Err() != nil ||
 		nextOrderState.dstBltUsed && !dstBltEnabled ||
+		nextOrderState.memBltUsed && !memBltEnabled ||
+		nextOrderState.mem3BltUsed && !mem3BltEnabled ||
 		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||
 		nextOrderState.scrBltUsed && !scrBltEnabled ||
 		nextOrderState.multiDstBltUsed && !multiDstBltEnabled ||
@@ -2029,7 +2220,13 @@ readUpdate:
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	s.mu.Lock()
+	if s.transport != transport {
+		s.mu.Unlock()
+		clearRDPBitmapCacheState(&nextOrderState)
+		return RDPBitmapUpdate{}, ErrMCSConnection
+	}
 	s.primaryOrderState = nextOrderState
+	orderState = nextOrderState
 	s.mu.Unlock()
 	if len(update.Rectangles) == 0 && binary.LittleEndian.Uint16(assembled[18:20]) == rdpUpdateOrders {
 		// A fully clipped order or DSTCOPY changes protocol state but not the framebuffer.

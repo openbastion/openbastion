@@ -258,15 +258,16 @@ func TestBitmapUpdateCarriesAWholeScreenOfTiles(t *testing.T) {
 	}
 }
 
-func TestOrdersAreRefusedOutsideThirtyTwoBPP(t *testing.T) {
-	share := make([]byte, 18+2+4)
-	binary.LittleEndian.PutUint16(share[0:2], uint16(len(share)))
-	binary.LittleEndian.PutUint16(share[2:4], rdpShareDataPDU)
-	binary.LittleEndian.PutUint32(share[6:10], 0x000103ea)
-	share[14] = rdpPDU2Update
-	binary.LittleEndian.PutUint16(share[18:20], rdpUpdateOrders)
-	if _, _, err := parseRDPBitmapShareDataAt(share, 0x000103ea, 100, 100, 16, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
-		t.Fatalf("orders at 16 bpp: %v", err)
+func TestOrdersAtNon32BPPAllowOnlyColorDepthIndependentDstBlt(t *testing.T) {
+	const shareID = uint32(0x000103ea)
+	dstBltShare := mcsTestOrdersShareData(shareID, 1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0)
+	if _, _, err := parseRDPBitmapShareDataAt(dstBltShare, shareID, 100, 100, 16, rdpPrimaryOrderState{}); err != nil {
+		t.Fatalf("DstBlt at 16 bpp: %v", err)
+	}
+	colorOrder := mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0x10, 0x20, 0x30)
+	colorShare := mcsTestOrdersShareData(shareID, 1, colorOrder, 0, 0)
+	if _, _, err := parseRDPBitmapShareDataAt(colorShare, shareID, 100, 100, 16, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("color order at 16 bpp: %v, want ErrMCSConnection", err)
 	}
 }
 

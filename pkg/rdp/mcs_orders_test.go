@@ -874,6 +874,67 @@ func TestParseRDPDstBltSupportsDeltaBoundsAndDestinationCopy(t *testing.T) {
 	}
 }
 
+func TestParseRDPScrBltSupportsCachedFieldsAndDeltaCoordinates(t *testing.T) {
+	first := mcsTestScrBltOrder(rdpOrderStandard|rdpOrderTypeChange, true, 2, 2, 3, 2, rdpScrBltSrcCopy, 1, 1)
+	second := mcsTestScrBltRawOrder(rdpOrderStandard|rdpOrderDeltaCoordinates, false, []byte{0x63}, []byte{1, 0xff, 1, 0xff})
+	// Omit the sole field-flag byte and reuse all seven cached fields.
+	third := mcsTestScrBltRawOrder(rdpOrderStandard|rdpOrderZeroFieldByteBit0, false, nil, nil)
+	orders := append(append(first, second...), third...)
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(3, orders, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][4]uint16{{2, 2, 3, 2}, {3, 1, 3, 2}, {3, 1, 3, 2}}
+	if len(got.Rectangles) != len(want) || !state.scrBltUsed ||
+		state.scrBltFields != [7]int32{3, 1, 3, 2, int32(rdpScrBltSrcCopy), 2, 0} {
+		t.Fatalf("ScrBlt cached update = %+v, state=%+v", got, state)
+	}
+	for i, rect := range got.Rectangles {
+		if [4]uint16{rect.X, rect.Y, rect.Width, rect.Height} != want[i] {
+			t.Errorf("rectangle %d = %+v, want %v", i, rect, want[i])
+		}
+	}
+	if got.Rectangles[1].sourceX != 2 || got.Rectangles[1].sourceY != 0 {
+		t.Fatalf("delta ScrBlt source = (%d,%d), want (2,0)", got.Rectangles[1].sourceX, got.Rectangles[1].sourceY)
+	}
+}
+
+func TestParseRDPScrBltClipsToSharedBoundsAndAdjustsSource(t *testing.T) {
+	order := []byte{rdpOrderStandard | rdpOrderTypeChange | rdpOrderBounds, rdpOrderScrBlt, 0x7f, 0x0f}
+	for _, value := range []int16{2, 2, 5, 5, 1, 1, 5, 5} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		order = append(order, encoded[:]...)
+	}
+	order = append(order, rdpScrBltSrcCopy)
+	for _, value := range []int16{0, 0} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		order = append(order, encoded[:]...)
+	}
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rectangles) != 1 || state.bounds != [4]int32{2, 2, 5, 5} {
+		t.Fatalf("bounded ScrBlt = %+v, state=%+v", got, state)
+	}
+	rect := got.Rectangles[0]
+	if [4]uint16{rect.X, rect.Y, rect.Width, rect.Height} != [4]uint16{2, 2, 4, 4} ||
+		rect.sourceX != 1 || rect.sourceY != 1 {
+		t.Fatalf("clipped ScrBlt = %+v, want destination 2,2 4x4 and source 1,1", rect)
+	}
+}
+
+func mcsTestScrBltRawOrder(control byte, typeChange bool, fieldFlags, fields []byte) []byte {
+	out := []byte{control}
+	if typeChange {
+		out = append(out, rdpOrderScrBlt)
+	}
+	out = append(out, fieldFlags...)
+	return append(out, fields...)
+}
+
 func TestReadBitmapUpdateCarriesDstBltFieldCacheAcrossPDUs(t *testing.T) {
 	certificate, roots, _ := rdpTestCertificate(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -1325,6 +1386,9 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2Black, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2White, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestRDPRev2BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap()), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(2, append(mcsTestRDPRev2BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap()), mcsTestRDPMemBltOrder(0, 0, 0, 0, 2, 2, 0xcc, 0, 0)...), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(2, append(mcsTestRDPRev3BitmapCacheOrder(0, 2, 2, mcsTestRDP2x2RawBitmap()), mcsTestRDPMem3BltOrder(0, 0, 0, 0, 2, 2, 0xf0, 0, 0, [3]byte{1, 2, 3}, 0)...), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _, _ = parseRDPOrdersUpdateData(data, 64, 64, rdpPrimaryOrderState{})

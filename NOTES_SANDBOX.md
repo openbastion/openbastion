@@ -5665,6 +5665,20 @@ Validation de l'incrément 65 :
 - `gofmt` et `git diff --check` : **PASS**.
 - Les tests Windows Server 2019/2022 ne sont pas exécutés localement conformément à la consigne ; ils restent obligatoires dans la CI de la PR. Aucune interopérabilité Windows/RDS réelle n'est revendiquée avant ce résultat.
 
+
+## Incrément RDP — cache bitmap v2/v3 et MemBlt/Mem3Blt (PR #321)
+
+- PR : https://github.com/openbastion/openbastion/pull/321. Commit fonctionnel : `ef292ee7ffe15fc2c65e25c14ea6fbcddb6f0d5f`. Branche : `feat/rdp-bitmap-cache-v2-v3`, basée sur `main` après PR #319 (`654faf358c7fb934d3fdb6389d430b26d9f4d3e0`).
+- ADR-0142 accepté : le cache bitmap v2/v3 et MemBlt/Mem3Blt ne sont annoncés qu'en profil 32 bpp borné ; DstBlt reste disponible en 15/16 bpp, sans cache.
+- Capabilities : `TS_BITMAPCACHE_REV2` (un cache, 256 entrées, sans persistance ni waiting list), `MemBlt`/`Mem3Blt` et `ORDERFLAGS_EX_CACHE_BITMAP_REV3_SUPPORT` avec `ORDERFLAGS_EXTRA_FLAGS`.
+- Secondaires : Cache Bitmap rév. 2 brut/RDP6 avec ou sans `bitmapComprHdr`, rév. 3 `codecID=0` brut ; `orderLength + 13`, encodages unsigned 2/4 octets, références et dimensions strictement bornées. Les TS_FP_UPDATE_ORDERS utilisent désormais le même décodeur/état transactionnel que TS_UPDATE_ORDERS (le corps Fast-Path commence par `numberOrders`, sans champs de padding).
+- Primaires : MemBlt ROP3 sans motif ; Mem3Blt ROP3 avec brosse `BS_SOLID`. Champs omis, coordonnées delta, bornes partagées, clipping, cache indexé par partage, ROP3 appliqué dans le framebuffer. `DSTCOPY` est consommé sans trame.
+- Cache : 256 entrées, 16 Mio par bitmap, 32 Mio d'état commis par partage (64 Mio transitoires maximum pendant un PDU transactionnel) ; état cloné et commis seulement après décodage complet du PDU ; réinitialisation à la réactivation/fermeture. `Close()` reste capable d'interrompre une lecture bloquée ; le chemin actif efface son snapshot avant de sortir.
+- Tests ajoutés : caches rév. 2/3, compression RDP6 avec/sans en-tête, MemBlt/Mem3Blt, clipping/deltas/champs omis, ROP3, limites mémoire, rollback atomique, capabilities par profondeur, réactivation, fermeture, TLS, TS_FP_UPDATE_ORDERS avec cache/MemBlt inter-PDU et fuzz.
+- Correctif après échec Windows Server 2022 32 bpp : décodage des TS_FP_UPDATE_ORDERS Fast-Path, dont le corps `numberOrders + orderData` ne contient pas les deux champs de padding du Slow-Path ; le décodeur et l'état transactionnel de cache/ordres sont partagés. Les sessions ne sont plus interrompues lorsque Windows émet MemBlt/Mem3Blt en Fast-Path.
+- Correctif du job PostgreSQL CI : le build de `gosu` utilise maintenant le pseudo-version Go immuable `v0.0.0-20261025094355-29b939aa5bd4` (commit source `29b939aa5bd4dc588af765b8248f6e39150d2565`) via le proxy Go et son checksum, au lieu d'un `git fetch` GitHub qui répondait HTTP 403. Build Docker PostgreSQL validé localement avec succès.
+- Validation locale après le correctif Fast-Path : `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` PASS ; `go test ./pkg/rdp -count=1` PASS ; `go test -race ./pkg/rdp -count=1` PASS ; `go vet ./pkg/rdp` PASS ; `cd services/proxy/rdp-vnc-proxy && go test -race ./... -count=1` PASS ; `FuzzParseRDPFastPathOrdersUpdate` PASS (116 186 exécutions en 5 s, 72 nouveaux cas intéressants) ; `git diff --check` PASS.
+- Les tests Windows Server 2019/2022 restent exclusivement en CI. Aucun test Windows exécuté localement.
 ## Incrément ADR-0137 — Accès, Sessions, Audit sur sous-routes
 
 - Les onglets de `/access` (`resources|accounts|policies|requests|hierarchy`), `/sessions` (`live|history|recordings|alerts`) et `/audit` (`journal|reports|evidence|retention`) sont des sous-routes déclarées dans `app/navigation.ts` (`views`, capacité par onglet). L'adresse nue redirige vers le premier onglet ; un onglet inconnu est un 404 (aucune destination courante) ; un onglet sans capacité est un 403 qui la nomme (`ViewGate`). Les écrans restent utilisables seuls (`useRoutedView` : état local sans `view`/`onViewChange`).
