@@ -899,6 +899,33 @@ func TestParseRDPScrBltSupportsCachedFieldsAndDeltaCoordinates(t *testing.T) {
 	}
 }
 
+func TestParseRDPScrBltClipsToSharedBoundsAndAdjustsSource(t *testing.T) {
+	order := []byte{rdpOrderStandard | rdpOrderTypeChange | rdpOrderBounds, rdpOrderScrBlt, 0x7f, 0x0f}
+	for _, value := range []int16{2, 2, 5, 5, 1, 1, 5, 5} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		order = append(order, encoded[:]...)
+	}
+	order = append(order, rdpScrBltSrcCopy)
+	for _, value := range []int16{0, 0} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		order = append(order, encoded[:]...)
+	}
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rectangles) != 1 || state.bounds != [4]int32{2, 2, 5, 5} {
+		t.Fatalf("bounded ScrBlt = %+v, state=%+v", got, state)
+	}
+	rect := got.Rectangles[0]
+	if [4]uint16{rect.X, rect.Y, rect.Width, rect.Height} != [4]uint16{2, 2, 4, 4} ||
+		rect.sourceX != 1 || rect.sourceY != 1 {
+		t.Fatalf("clipped ScrBlt = %+v, want destination 2,2 4x4 and source 1,1", rect)
+	}
+}
+
 func mcsTestScrBltRawOrder(control byte, typeChange bool, fieldFlags, fields []byte) []byte {
 	out := []byte{control}
 	if typeChange {
