@@ -140,6 +140,33 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **La cadence plafonne sous 20 images/s** : 11,5 à 13,6 images par seconde de vidéo, pour 25 changements par seconde à l'écran et un plafond de 20 (une image toutes les 50 ms). L'encodage, 17 à 43 ms par image, en explique une partie ; la cadence que Windows envoie n'a pas été mesurée à part.
 - **Ce que ça décide** : rien de nouveau pour les lots B et C. Une vidéo réelle serait plus légère que ce bruit. Si l'on voulait réduire le lien cible → proxy en vidéo, c'est RDPGFX (lot C) qui le ferait, et ses codecs sans perte resteraient lourds sur un tel contenu. Le lot A est clos, sauf le S3 distant.
 
+### Re-mesure du lot A — 27 novembre 2026
+
+La CI Windows de la PR #327 (run **46062820587**, commit `4cddd35`) a rejoué `TestRDPWindows_Measure` sur cinq profils : Windows Server 2019 en 16 bpp, Windows Server 2022 en 16 bpp (session standard, session console et clavier `fr-FR`) et Windows Server 2022 en 32 bpp. Chaque artefact contient les mesures en images entières et partielles. Les sept jobs du workflow Windows RDP ont réussi.
+
+Les valeurs ci-dessous sont celles des **images entières**, en Kio/s reçus de la cible (compteur TLS `ServerBytes`) :
+
+| Cible | Frappe | Repeint texte dense | Défilement | Vidéo de stress |
+|---|---:|---:|---:|---:|
+| Windows Server 2019, 16 bpp, en-US | 12,5 | 20,3 | 1,9 | 644,1 |
+| Windows Server 2022, 16 bpp, en-US | 13,0 | 23,2 | 2,1 | 607,8 |
+| Windows Server 2022, 16 bpp, console | 15,1 | 27,9 | 4,2 | 641,4 |
+| Windows Server 2022, 16 bpp, fr-FR | 32,7 | 60,5 | 17,2 | 646,9 |
+| Windows Server 2022, 32 bpp, en-US | 51,5 | 68,3 | 12,0 | 1 757,8 |
+
+**Lecture des résultats :**
+
+- La frappe reste entre **12,5 et 51,5 Kio/s** ; le repeint d'une fenêtre de texte dense reste entre **20,3 et 68,3 Kio/s**. Le défilement reste entre **1,9 et 17,2 Kio/s**. Ces débits ne montrent pas de saturation du lien cible → proxy pour le texte.
+- La vidéo synthétique reste dans une autre classe, **0,6 à 1,8 Mio/s**. C'est un scénario de stress graphique, pas un indicateur du coût du texte ni une justification du cache de glyphes.
+- La latence touche → première image mesurée sur les profils Windows est de **51,4 à 83,6 ms au p50** et **77,2 à 92,0 ms au p90** en images entières. En images partielles, elle est de **38,8 à 52,5 ms au p50** et **64,8 à 88,0 ms au p90**. Cette mesure n'inclut ni le réseau opérateur ni l'acquittement du Video Recorder.
+- Le réencodage PNG de la dernière image mesurée en images entières se situe entre **13,3 et 34,4 ms** selon le profil. Le tas Go est un pic global du processus de test, pas une mesure isolée par session ; les artefacts montrent environ **8 à 27 Mio** en images entières et jusqu'à **33 Mio** en images partielles.
+- Le mode partiel réduit fortement le volume d'images enregistré pour les petites modifications, mais ne réduit pas les octets reçus de la cible de façon constante. Les grandes mises à jour restent des images clés.
+
+**Limites de cette re-mesure :** `dense-text` provoque un repeint d'une fenêtre Notepad déjà remplie, pas un flux continu de modifications textuelles ; `encodeMsMedian` est calculé par cinq réencodages de la dernière image, et non par instrumentation de chaque encodage en production ; `HeapMiBPeak` est échantillonné au niveau du processus. Les résultats du 27 novembre ne refont pas le banc d'acquittement du Video Recorder, qui reste documenté plus haut.
+
+**Décision :** ces mesures confirment la décision d'ADR-0089. Le texte en bitmaps n'est pas un goulot démontré ; le cache de glyphes reste différé. Les débits vidéo ne doivent pas être utilisés pour justifier cette surface de parsing supplémentaire. Aucune capacité glyphes n'est annoncée et aucun ordre glyphes n'est accepté.
+
+
 ### Lot B — Ordres graphiques
 
 1. **Ordres primaires déjà décodés, à annoncer** : DstBlt et ScrBlt sont annoncés sur des profils bornés ; ScrBlt accepte `SRCCOPY`, champs omis, coordonnées delta et bornes partagées. PatBlt, OpaqueRect et leurs variantes Multi, LineTo, Polyline, PolygonSC, EllipseSC restent à élargir là où Windows en sort : bornes, deltas, `ZEROBOUNDSDELTAS`, champs omis.

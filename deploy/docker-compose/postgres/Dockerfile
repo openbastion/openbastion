@@ -23,16 +23,22 @@ RUN apt-get update \
     && apt-get install --no-install-recommends --yes --only-upgrade \
         apt libapt-pkg6.0 \
         libpam-modules libpam-modules-bin libpam-runtime libpam0g \
+        libzstd1 zstd \
     && apt_version="$(dpkg-query -W -f='${Version}' apt)" \
     && libapt_version="$(dpkg-query -W -f='${Version}' libapt-pkg6.0)" \
     && pam_modules_version="$(dpkg-query -W -f='${Version}' libpam-modules)" \
     && pam_modules_bin_version="$(dpkg-query -W -f='${Version}' libpam-modules-bin)" \
     && pam_runtime_version="$(dpkg-query -W -f='${Version}' libpam-runtime)" \
     && pam_version="$(dpkg-query -W -f='${Version}' libpam0g)" \
+    && libzstd_version="$(dpkg-query -W -f='${Version}' libzstd1)" \
+    && zstd_version="$(dpkg-query -W -f='${Version}' zstd)" \
     && dpkg --compare-versions "$apt_version" ge 2.6.2 \
     && dpkg --compare-versions "$libapt_version" ge 2.6.2 \
     && for version in "$pam_modules_version" "$pam_modules_bin_version" "$pam_runtime_version" "$pam_version"; do \
         dpkg --compare-versions "$version" ge 1.5.2-6+deb12u3; \
     done \
-    && printf 'apt=%s libapt-pkg6.0=%s libpam=%s\n' "$apt_version" "$libapt_version" "$pam_version" \
+    && for version in "$libzstd_version" "$zstd_version"; do \
+        dpkg --compare-versions "$version" ge 1.5.4+dfsg2-5+deb12u1; \
+    done \
+    && printf 'apt=%s libapt-pkg6.0=%s libpam=%s libzstd1=%s zstd=%s\n' "$apt_version" "$libapt_version" "$pam_version" "$libzstd_version" "$zstd_version" \
     && rm -rf /var/lib/apt/lists/*
