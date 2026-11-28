@@ -1,6 +1,6 @@
 # ADR-0149 — Entrée clavier et souris Fast-Path RDP
 
-**Statut** `Proposé` · 28 novembre 2026
+**Statut** `Accepté` · 28 novembre 2026
 
 ## Contexte
 
@@ -8,7 +8,7 @@ OpenBastion décode déjà les mises à jour graphiques et pointeur Fast-Path é
 
 La spécification MS-RDPBCGR définit `TS_FP_INPUT_PDU`, qui remplace l'enveloppe TPKT/X.224/MCS/Share Data pour transporter des événements client-vers-serveur compacts. Le client annonce cette capacité dans `TS_INPUT_CAPABILITYSET` via `INPUT_FLAG_FASTPATH_INPUT2` (`0x0020`). Le flux RDP OpenBastion utilise TLS comme sécurité externe ; les mécanismes de chiffrement/MAC de la sécurité RDP standard ne doivent donc pas être ajoutés au PDU Fast-Path.
 
-## Décision proposée
+## Décision
 
 1. Ajouter une sérialisation Fast-Path Input uniquement pour les connexions dont le serveur confirme la prise en charge Fast-Path dans son `TS_INPUT_CAPABILITYSET`. Conserver le slow-path comme comportement de repli lorsque la capacité n'est pas confirmée.
 2. Annoncer `INPUT_FLAG_FASTPATH_INPUT2` (`0x0020`) dans le `TS_INPUT_CAPABILITYSET` client, sans annoncer les capacités QoE, souris relative ou événements étendus non implémentés. Garder `INPUT_FLAG_SCANCODES` et les capacités Unicode déjà prises en charge.

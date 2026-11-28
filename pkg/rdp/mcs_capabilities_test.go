@@ -25,6 +25,15 @@ func TestParseRDPDemandActiveValidatesServerCapabilities(t *testing.T) {
 	if len(got.CapabilityTypes) != 5 {
 		t.Fatalf("capability types = %v", got.CapabilityTypes)
 	}
+	if got.InputFlags != rdpInputFlagScancodes {
+		t.Fatalf("server input flags = %#04x", got.InputFlags)
+	}
+	fastPathCaps := mcsTestCapabilitySets()
+	binary.LittleEndian.PutUint16(fastPathCaps[4][4:6], rdpInputFlagScancodes|rdpInputFlagUnicode|rdpInputFlagFastPathInput2)
+	fastPathServer, err := parseRDPDemandActive(mcsTestDemandActiveWithCaps(fastPathCaps), mcsGlobalChannelID)
+	if err != nil || fastPathServer.InputFlags != (rdpInputFlagScancodes|rdpInputFlagUnicode|rdpInputFlagFastPathInput2) {
+		t.Fatalf("Fast-Path server capability flags = %#04x, err=%v", fastPathServer.InputFlags, err)
+	}
 	// 15 and 16 bpp, which Windows offers when its maximum color depth is left as installed
 	// (ADR-0086), are accepted and kept: the Confirm Active and the bitmaps follow them.
 	for _, bpp := range []uint16{15, 16} {
@@ -185,7 +194,7 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(caps[180:182]) != rdpCapBrush || binary.LittleEndian.Uint16(caps[182:184]) != 8 ||
 		binary.LittleEndian.Uint32(caps[184:188]) != rdpBrushSupportColor8x8 ||
 		binary.LittleEndian.Uint16(caps[188:190]) != rdpCapPointer || binary.LittleEndian.Uint16(caps[192:194]) != 1 ||
-		binary.LittleEndian.Uint16(caps[198:200]) != rdpCapInput || binary.LittleEndian.Uint16(caps[202:204]) != 1 ||
+		binary.LittleEndian.Uint16(caps[198:200]) != rdpCapInput || binary.LittleEndian.Uint16(caps[202:204]) != (rdpInputFlagScancodes|rdpInputFlagUnicode|rdpInputFlagFastPathInput2) ||
 		binary.LittleEndian.Uint32(caps[210:214]) != rdpKeyboardEnhanced ||
 		binary.LittleEndian.Uint32(caps[218:222]) != rdpKeyboardFunctionKeys {
 		t.Fatalf("client advertised invalid mandatory baseline capabilities: %x", caps[52:])

@@ -1,10 +1,13 @@
 package rdp
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -114,6 +117,179 @@ func TestMarshalRDPInputRejectsMalformedEventsAndBounds(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMarshalRDPFastPathInputEncodesSupportedEvents(t *testing.T) {
+	events := []RDPInputEvent{
+		{Type: RDPInputScancode, Scancode: 0x1d, Extended: true},
+		{Type: RDPInputScancode, Scancode: 0x1d, Released: true},
+		{Type: RDPInputUnicode, Unicode: 0x6c34},
+		{Type: RDPInputUnicode, Unicode: 0x6c34, Released: true},
+		{Type: RDPInputMouse, PointerFlags: rdpPtrFlagsMove | rdpPtrFlagsButton1 | rdpPtrFlagsDown, X: 0x1234, Y: 0x5678},
+		{Type: RDPInputSync, ToggleFlags: 0x2},
+	}
+	packet, err := marshalRDPFastPathInput(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(packet)
+	if packet[0] != byte(len(events)<<2) || int(packet[1]) != len(packet) || len(packet) != 20 {
+		t.Fatalf("Fast-Path header/length = %x", packet)
+	}
+	want := []byte{
+		0x10, 0x1d, // extended scancode
+		0x08, 0x1d, // release scancode
+		0x04, 0x34, 0x6c, // Unicode
+		0x0c, 0x34, 0x6c, // Unicode release
+		0x01, 0x00, 0x98, 0x34, 0x12, 0x78, 0x56, // absolute mouse
+		0x13, // synchronize: toggle flags are in the five event-header flag bits
+	}
+	if !bytes.Equal(packet[2:], want) {
+		t.Fatalf("Fast-Path events = %x, want %x", packet[2:], want)
+	}
+}
+
+func TestMarshalRDPFastPathInputUsesNegotiatedCapabilities(t *testing.T) {
+	unicode := []RDPInputEvent{{Type: RDPInputUnicode, Unicode: 'A'}}
+	if fastPathInputEventsSupported(unicode, rdpInputFlagFastPathInput2) {
+		t.Fatal("Unicode accepted without negotiated Unicode capability")
+	}
+	if !fastPathInputEventsSupported(unicode, rdpInputFlagFastPathInput2|rdpInputFlagUnicode) {
+		t.Fatal("Unicode rejected despite negotiated capabilities")
+	}
+	if fastPathInputEventsSupported([]RDPInputEvent{{Type: RDPInputScancode, Scancode: 0x1e}}, rdpInputFlagScancodes) {
+		t.Fatal("Fast-Path accepted without FASTPATH_INPUT2")
+	}
+	if fastPathInputEventsSupported([]RDPInputEvent{{Type: RDPInputEventType(99)}}, rdpInputFlagFastPathInput2) {
+		t.Fatal("unknown event accepted")
+	}
+}
+
+func TestMarshalRDPFastPathInputRejectsMalformedEvents(t *testing.T) {
+	cases := map[string]RDPInputEvent{
+		"zero scancode":       {Type: RDPInputScancode},
+		"scancode mixed":      {Type: RDPInputScancode, Scancode: 0x1e, Unicode: 'A'},
+		"zero Unicode":        {Type: RDPInputUnicode},
+		"Unicode extended":    {Type: RDPInputUnicode, Unicode: 'A', Extended: true},
+		"mouse without flags": {Type: RDPInputMouse},
+		"sync unknown toggle": {Type: RDPInputSync, ToggleFlags: 0x10},
+		"unknown type":        {Type: RDPInputEventType(99)},
+	}
+	for name, event := range cases {
+		t.Run(name, func(t *testing.T) {
+			if packet, err := marshalRDPFastPathInput([]RDPInputEvent{event}); !errors.Is(err, ErrMCSConnection) || len(packet) != 0 {
+				t.Fatalf("packet=%x err=%v", packet, err)
+			}
+		})
+	}
+	if packet, err := marshalRDPFastPathInput(nil); !errors.Is(err, ErrMCSConnection) || len(packet) != 0 {
+		t.Fatalf("empty: packet=%x err=%v", packet, err)
+	}
+}
+
+func TestMarshalRDPFastPathInputLengthAndEventCountBoundaries(t *testing.T) {
+	for _, count := range []int{1, 15, 16, 128} {
+		events := make([]byte, count)
+		packet, err := marshalRDPFastPathInputPDU(events, count)
+		if err != nil {
+			t.Fatalf("count %d: %v", count, err)
+		}
+		if count <= 15 && packet[0] != byte(count<<2) {
+			t.Fatalf("count %d inline header = %#x", count, packet[0])
+		}
+		if count > 15 && (packet[0] != 0 || packet[2+boolInt(len(packet) > 127)] != byte(count)) {
+			t.Fatalf("count %d extended header = %x", count, packet[:4])
+		}
+		clear(packet)
+	}
+	// Exercise both legal length encodings directly, including the 16,383-byte cap.
+	for _, tc := range []struct {
+		name          string
+		payload, want int
+	}{
+		{name: "short maximum", payload: 125, want: 127},
+		{name: "first extended encoding", payload: 126, want: 129},
+		{name: "maximum PDU", payload: rdpFastPathInputMaxPDU - 3, want: rdpFastPathInputMaxPDU},
+	} {
+		encoded, err := marshalRDPFastPathInputPDU(make([]byte, tc.payload), 1)
+		if err != nil || len(encoded) != tc.want {
+			t.Fatalf("%s: len=%d want=%d err=%v", tc.name, len(encoded), tc.want, err)
+		}
+		clear(encoded)
+	}
+	if packet, err := marshalRDPFastPathInputPDU(make([]byte, rdpFastPathInputMaxPDU), 1); !errors.Is(err, ErrMCSConnection) || len(packet) != 0 {
+		t.Fatalf("oversize: len=%d err=%v", len(packet), err)
+	}
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func TestSendInputUsesFastPathOnlyAfterNegotiation(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		header := make([]byte, 2)
+		if _, acceptErr = io.ReadFull(tlsConn, header); acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		if header[0] != 0x04 || header[1] != 4 {
+			serverResult <- fmt.Errorf("unexpected Fast-Path header %x", header)
+			return
+		}
+		event := make([]byte, 2)
+		if _, acceptErr = io.ReadFull(tlsConn, event); acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		if !bytes.Equal(event, []byte{0, 0x1e}) {
+			serverResult <- fmt.Errorf("unexpected Fast-Path event %x", event)
+			return
+		}
+		serverResult <- nil
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		mcsResponse: MCSConnectResponse{IOChannelID: mcsGlobalChannelID}, userChannelID: 1007,
+		serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, InputFlags: rdpInputFlagScancodes | rdpInputFlagUnicode | rdpInputFlagFastPathInput2},
+	}
+	if err := session.SendInput(context.Background(), []RDPInputEvent{{Type: RDPInputScancode, Scancode: 0x1e}}, time.Second); err != nil {
+		t.Fatalf("SendInput: %v", err)
+	}
+	if err := <-serverResult; err != nil {
+		t.Fatal(err)
+	}
+	session.Close()
 }
 
 func TestSendInputCanWriteWhileBitmapReaderIsBlocked(t *testing.T) {
