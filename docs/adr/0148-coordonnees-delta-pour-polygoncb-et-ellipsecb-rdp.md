@@ -1,6 +1,6 @@
 # ADR-0148 — Coordonnées delta pour PolygonCB et EllipseCB RDP
 
-**Statut** `Proposé` · 28 novembre 2026
+**Statut** `Accepté` · 28 novembre 2026
 
 ## Contexte
 
