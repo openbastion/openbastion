@@ -214,6 +214,8 @@ type rdpPrimaryOrderState struct {
 	ellipseSCUsed        bool
 	polygonCBUsed        bool
 	ellipseCBUsed        bool
+	polygonCBCoords      [2]int32
+	ellipseCBCoords      [4]int32
 	multiOpaqueRectUsed  bool
 }
 
@@ -499,14 +501,15 @@ func parseRDPDstBltOrder(data []byte, control byte, state *rdpPrimaryOrderState,
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
 // DstBlt, ScrBlt, MemBlt and Mem3Blt have cached-field, delta-coordinate and clipping-bounds
 // profiles; PatBlt accepts only its bounded cached-brush/solid ROP subset. PolygonCB and EllipseCB
-// use independent, cache-backed profiles with explicit fields and absolute coordinates. Other
+// use independent, cache-backed profiles with explicit fields and per-family absolute/delta
+// coordinate state. Other
 // decoded order families remain unadvertised until their negotiated profiles are implemented.
 // parseRDPPolygonCBOrder decodes the deliberately narrow cached-brush profile.
 // Every required field is present; BrushExtra is forbidden because the brush comes from
 // the negotiated cache. This avoids implicit per-order field-cache state.
 func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderState, update *RDPBitmapUpdate, totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
 	const fieldMask = uint32(0x1bff) // x/y, ROP2, fill, colors, origin, style/index, count and delta list.
-	const allowedControl = rdpOrderStandard | rdpOrderTypeChange | rdpOrderZeroFieldByteMask
+	const allowedControl = rdpOrderStandard | rdpOrderTypeChange | rdpOrderDeltaCoordinates | rdpOrderZeroFieldByteMask
 	if state == nil || update == nil || totalPixels == nil || control&^allowedControl != 0 {
 		return data, ErrMCSConnection
 	}
@@ -515,11 +518,12 @@ func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 		return data, ErrMCSConnection
 	}
 	data = rest
-	startX, data, err := readRDPPrimaryCoord(data, 0, false)
+	deltaCoordinates := control&rdpOrderDeltaCoordinates != 0
+	startX, data, err := readRDPPrimaryCoord(data, state.polygonCBCoords[0], deltaCoordinates)
 	if err != nil {
 		return data, ErrMCSConnection
 	}
-	startY, data, err := readRDPPrimaryCoord(data, 0, false)
+	startY, data, err := readRDPPrimaryCoord(data, state.polygonCBCoords[1], deltaCoordinates)
 	if err != nil || len(data) < 14 {
 		return data, ErrMCSConnection
 	}
@@ -570,6 +574,7 @@ func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 		patternPixels: patternPixels, patternOriginX: originX, patternOriginY: originY,
 	})
 	*totalPixels += pixels
+	state.polygonCBCoords = [2]int32{startX, startY}
 	state.polygonCBUsed = true
 	return data[encodedLength:], nil
 }
@@ -577,7 +582,7 @@ func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 // parseRDPEllipseCBOrder decodes the same cached-color-brush profile for inclusive bounds.
 func parseRDPEllipseCBOrder(data []byte, control byte, state *rdpPrimaryOrderState, update *RDPBitmapUpdate, totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
 	const fieldMask = uint32(0x0fff) // Four coordinates, ROP2/fill/colors, brush origin/style/index; no BrushExtra.
-	const allowedControl = rdpOrderStandard | rdpOrderTypeChange | rdpOrderZeroFieldByteMask
+	const allowedControl = rdpOrderStandard | rdpOrderTypeChange | rdpOrderDeltaCoordinates | rdpOrderZeroFieldByteMask
 	if state == nil || update == nil || totalPixels == nil || control&^allowedControl != 0 {
 		return data, ErrMCSConnection
 	}
@@ -586,9 +591,10 @@ func parseRDPEllipseCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 		return data, ErrMCSConnection
 	}
 	data = rest
-	coords := [4]int32{}
+	coords := state.ellipseCBCoords
+	deltaCoordinates := control&rdpOrderDeltaCoordinates != 0
 	for i := range coords {
-		coords[i], data, err = readRDPPrimaryCoord(data, 0, false)
+		coords[i], data, err = readRDPPrimaryCoord(data, state.ellipseCBCoords[i], deltaCoordinates)
 		if err != nil {
 			return data, ErrMCSConnection
 		}
@@ -630,6 +636,7 @@ func parseRDPEllipseCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 		ellipseROP2: ropField & 0x1f, patternPixels: patternPixels, patternOriginX: originX, patternOriginY: originY,
 	})
 	*totalPixels += pixels
+	state.ellipseCBCoords = coords
 	state.ellipseCBUsed = true
 	return data[12:], nil
 }

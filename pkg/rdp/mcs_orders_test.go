@@ -8,6 +8,7 @@ import (
 	"errors"
 	"image/color"
 	"image/png"
+	"math"
 	"net"
 	"testing"
 	"time"
@@ -3173,5 +3174,104 @@ func TestTextOrdersAreRefused(t *testing.T) {
 				t.Fatalf("session: %v, want ErrMCSConnection", err)
 			}
 		})
+	}
+}
+
+func mcsTestDeltaCoordinateOrder(order []byte, deltas ...int8) []byte {
+	out := []byte{rdpOrderStandard | rdpOrderDeltaCoordinates}
+	out = append(out, order[2:4]...)
+	for _, delta := range deltas {
+		out = append(out, byte(delta))
+	}
+	coordinateEnd := 4 + 2*len(deltas)
+	return append(out, order[coordinateEnd:]...)
+}
+
+func TestParseRDPPolygonCBDeltaCoordinatesUseIndependentPreviousValues(t *testing.T) {
+	state := mcsTestColorBrushState(7)
+	first := mcsTestPolygonCBOrder(5, 6, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	second := mcsTestDeltaCoordinateOrder(first, 2, -3)
+	orders := append(first, second...)
+	update, next, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(2, orders, 0, 0), 16, 16, 32, state)
+	if err != nil || len(update.Rectangles) != 2 {
+		t.Fatalf("PolygonCB delta update=%+v err=%v", update, err)
+	}
+	if next.polygonCBCoords != [2]int32{7, 3} || next.ellipseCBCoords != [4]int32{} {
+		t.Fatalf("PolygonCB coordinate caches=%v ellipse cache=%v", next.polygonCBCoords, next.ellipseCBCoords)
+	}
+	if got := update.Rectangles[1].polygonPoints[0]; got != [2]uint16{7, 3} {
+		t.Fatalf("delta polygon start=%v, want [7 3]", got)
+	}
+}
+
+func TestParseRDPEllipseCBDeltaCoordinatesUseIndependentPreviousValues(t *testing.T) {
+	state := mcsTestColorBrushState(9)
+	first := mcsTestEllipseCBOrder(2, 2, 6, 6, 9)
+	second := mcsTestDeltaCoordinateOrder(first, 1, 1, -1, -1)
+	orders := append(first, second...)
+	update, next, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(2, orders, 0, 0), 16, 16, 32, state)
+	if err != nil || len(update.Rectangles) != 2 {
+		t.Fatalf("EllipseCB delta update=%+v err=%v", update, err)
+	}
+	if next.ellipseCBCoords != [4]int32{3, 3, 5, 5} || next.polygonCBCoords != [2]int32{} {
+		t.Fatalf("EllipseCB coordinate caches=%v polygon cache=%v", next.ellipseCBCoords, next.polygonCBCoords)
+	}
+	if got := update.Rectangles[1]; got.X != 3 || got.Y != 3 || got.Width != 3 || got.Height != 3 {
+		t.Fatalf("delta ellipse bounds=%+v, want 3,3 3x3", got)
+	}
+}
+
+func TestParseRDPPolygonCBDeltaCoordinatesStartAtZeroAndRejectOverflow(t *testing.T) {
+	state := mcsTestColorBrushState(7)
+	absolute := mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	initialDelta := mcsTestDeltaCoordinateOrder(absolute, 2, 3)
+	initialDelta[0] = rdpOrderStandard | rdpOrderTypeChange | rdpOrderDeltaCoordinates
+	initialDelta = append(initialDelta[:1], append([]byte{rdpOrderPolygonCB}, initialDelta[1:]...)...)
+	update, next, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, initialDelta, 0, 0), 16, 16, 32, state)
+	if err != nil || len(update.Rectangles) != 1 || next.polygonCBCoords != [2]int32{2, 3} {
+		t.Fatalf("zero-based PolygonCB delta state=%v update=%+v err=%v", next.polygonCBCoords, update, err)
+	}
+	state.polygonCBCoords = [2]int32{math.MaxInt16, 0}
+	overflow := mcsTestDeltaCoordinateOrder(absolute, 1, 0)
+	overflow[0] = rdpOrderStandard | rdpOrderTypeChange | rdpOrderDeltaCoordinates
+	overflow = append(overflow[:1], append([]byte{rdpOrderPolygonCB}, overflow[1:]...)...)
+	_, unchanged, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, overflow, 0, 0), 16, 16, 32, state)
+	if err == nil || unchanged.polygonCBCoords != state.polygonCBCoords {
+		t.Fatalf("overflow err=%v returned cache=%v, want unchanged %v", err, unchanged.polygonCBCoords, state.polygonCBCoords)
+	}
+}
+
+func TestParseRDPPolygonCBDeltaCoordinatesRejectUnderflowAndDesktopOverflow(t *testing.T) {
+	base := mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	tests := []struct {
+		name           string
+		previous       [2]int32
+		deltaX, deltaY int8
+	}{
+		{name: "int16 underflow", previous: [2]int32{math.MinInt16, 1}, deltaX: -1},
+		{name: "desktop overflow", previous: [2]int32{15, 1}, deltaX: 1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state := mcsTestColorBrushState(7)
+			state.polygonCBCoords = test.previous
+			delta := mcsTestDeltaCoordinateOrder(base, test.deltaX, test.deltaY)
+			_, unchanged, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, delta, 0, 0), 16, 16, 32, state)
+			if err == nil || unchanged.polygonCBCoords != test.previous {
+				t.Fatalf("invalid coordinate err=%v returned cache=%v, want unchanged %v", err, unchanged.polygonCBCoords, test.previous)
+			}
+		})
+	}
+}
+
+func TestParseRDPPolygonCBDeltaCoordinatesRollbackOnTruncatedOrder(t *testing.T) {
+	state := mcsTestColorBrushState(7)
+	state.polygonCBCoords = [2]int32{4, 4}
+	absolute := mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	delta := mcsTestDeltaCoordinateOrder(absolute, 1, -1)
+	delta = delta[:4] // Keep only the first of the two required coordinate deltas.
+	_, unchanged, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, delta, 0, 0), 16, 16, 32, state)
+	if err == nil || unchanged.polygonCBCoords != state.polygonCBCoords {
+		t.Fatalf("truncated order err=%v returned cache=%v, want unchanged %v", err, unchanged.polygonCBCoords, state.polygonCBCoords)
 	}
 }
