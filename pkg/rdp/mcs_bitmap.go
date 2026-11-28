@@ -501,9 +501,9 @@ func parseRDPDstBltOrder(data []byte, control byte, state *rdpPrimaryOrderState,
 // profiles; PatBlt accepts only its bounded cached-brush/solid ROP subset. PolygonCB and EllipseCB
 // use independent, cache-backed profiles with explicit fields and absolute coordinates. Other
 // decoded order families remain unadvertised until their negotiated profiles are implemented.
-// parseRDPPolygonCBOrder decodes the deliberately narrow cached-color-brush profile.
+// parseRDPPolygonCBOrder decodes the deliberately narrow cached-brush profile.
 // Every required field is present; BrushExtra is forbidden because the brush comes from
-// the negotiated 24-bpp cache. This avoids implicit per-order field-cache state.
+// the negotiated cache. This avoids implicit per-order field-cache state.
 func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderState, update *RDPBitmapUpdate, totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
 	const fieldMask = uint32(0x1bff) // x/y, ROP2, fill, colors, origin, style/index, count and delta list.
 	const allowedControl = rdpOrderStandard | rdpOrderTypeChange | rdpOrderZeroFieldByteMask
@@ -531,7 +531,9 @@ func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 	fore := [4]byte{data[5], data[6], data[7], 0xff}
 	originX, originY := int32(int8(data[8])), int32(int8(data[9]))
 	brushStyle, brushIndex := data[10], data[11]
-	if brushStyle != 0x80|rdpBrushFormat24BPP || brushIndex >= rdpBrushCacheEntries {
+	brushFormat := brushStyle & 0x0f
+	if brushStyle&0x80 == 0 || brushStyle&0x70 != 0 ||
+		(brushFormat != rdpBrushFormat1BPP && brushFormat != rdpBrushFormat24BPP) || brushIndex >= rdpBrushCacheEntries {
 		return data, ErrMCSConnection
 	}
 	count := int(data[12])
@@ -543,7 +545,11 @@ func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 	if startX < 0 || startY < 0 || startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
 		return data, ErrMCSConnection
 	}
-	brush, err := cachedRDPBrush(state, rdpBrushFormat24BPP, brushIndex)
+	brush, err := cachedRDPBrush(state, brushFormat, brushIndex)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	patternPixels, err := cachedRDPPrimaryBrushPattern(brush, fore, back)
 	if err != nil {
 		return data, ErrMCSConnection
 	}
@@ -558,12 +564,10 @@ func parseRDPPolygonCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 	if err != nil || len(update.Rectangles) >= maxRDPBitmapRects || pixels > maxRDPDesktopArea-*totalPixels {
 		return data, ErrMCSConnection
 	}
-	_ = fore // Cached color brushes carry their own pixels; colors remain wire-validated fields.
-	_ = back
 	update.Rectangles = append(update.Rectangles, RDPBitmapRectangle{
 		X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectanglePolygon,
 		polygonPoints: points, polygonFillMode: fillMode, polygonROP2: ropField & 0x1f,
-		patternPixels: append([]byte(nil), brush.pixels...), patternOriginX: originX, patternOriginY: originY,
+		patternPixels: patternPixels, patternOriginX: originX, patternOriginY: originY,
 	})
 	*totalPixels += pixels
 	state.polygonCBUsed = true
@@ -600,12 +604,18 @@ func parseRDPEllipseCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 	fore := [4]byte{data[5], data[6], data[7], 0xff}
 	originX, originY := int32(int8(data[8])), int32(int8(data[9]))
 	brushStyle, brushIndex := data[10], data[11]
-	if brushStyle != 0x80|rdpBrushFormat24BPP || brushIndex >= rdpBrushCacheEntries ||
+	brushFormat := brushStyle & 0x0f
+	if brushStyle&0x80 == 0 || brushStyle&0x70 != 0 ||
+		(brushFormat != rdpBrushFormat1BPP && brushFormat != rdpBrushFormat24BPP) || brushIndex >= rdpBrushCacheEntries ||
 		coords[0] < 0 || coords[1] < 0 || coords[2] < coords[0] || coords[3] < coords[1] ||
 		coords[2] >= int32(desktopWidth) || coords[3] >= int32(desktopHeight) {
 		return data, ErrMCSConnection
 	}
-	brush, err := cachedRDPBrush(state, rdpBrushFormat24BPP, brushIndex)
+	brush, err := cachedRDPBrush(state, brushFormat, brushIndex)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	patternPixels, err := cachedRDPPrimaryBrushPattern(brush, fore, back)
 	if err != nil {
 		return data, ErrMCSConnection
 	}
@@ -615,11 +625,9 @@ func parseRDPEllipseCBOrder(data []byte, control byte, state *rdpPrimaryOrderSta
 	if err != nil || len(update.Rectangles) >= maxRDPBitmapRects || pixels > maxRDPDesktopArea-*totalPixels {
 		return data, ErrMCSConnection
 	}
-	_ = fore // Cached color brushes carry their own pixels; colors remain wire-validated fields.
-	_ = back
 	update.Rectangles = append(update.Rectangles, RDPBitmapRectangle{
 		X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectangleEllipse,
-		ellipseROP2: ropField & 0x1f, patternPixels: append([]byte(nil), brush.pixels...), patternOriginX: originX, patternOriginY: originY,
+		ellipseROP2: ropField & 0x1f, patternPixels: patternPixels, patternOriginX: originX, patternOriginY: originY,
 	})
 	*totalPixels += pixels
 	state.ellipseCBUsed = true

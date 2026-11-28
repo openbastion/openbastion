@@ -1460,6 +1460,47 @@ func TestParseRDPOrdersUpdateDecodesEllipseCBFromCachedColorBrush(t *testing.T) 
 	}
 }
 
+func mcsTestMonoBrushState(index byte) rdpPrimaryOrderState {
+	return rdpPrimaryOrderState{brushCache: &rdpBrushCacheState{
+		mono:  map[byte]rdpCachedBrush{index: {format: rdpBrushFormat1BPP, pixels: []byte{0, 0, 0, 0, 0, 0xa0, 0, 0}}},
+		color: make(map[byte]rdpCachedBrush),
+	}}
+}
+
+func TestParseRDPOrdersUpdateDecodesPolygonCBAndEllipseCBFromCachedMonoBrush(t *testing.T) {
+	for name, order := range map[string][]byte{
+		"polygon": mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}),
+		"ellipse": mcsTestEllipseCBOrder(1, 1, 5, 5, 9),
+	} {
+		t.Run(name, func(t *testing.T) {
+			index := byte(7)
+			styleOffset := 18
+			if name == "ellipse" {
+				index, styleOffset = 9, 22
+			}
+			order = append([]byte(nil), order...)
+			order[styleOffset] = 0x80 | rdpBrushFormat1BPP
+			state := mcsTestMonoBrushState(index)
+			update, next, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, order, 0, 0), 16, 16, 32, state)
+			if err != nil || len(update.Rectangles) != 1 {
+				t.Fatalf("mono CB update=%+v state=%+v err=%v", update, next, err)
+			}
+			if name == "polygon" && !next.polygonCBUsed || name == "ellipse" && !next.ellipseCBUsed {
+				t.Fatalf("CB usage not recorded: %+v", next)
+			}
+			pattern := update.Rectangles[0].patternPixels
+			foreground := []byte{0x11, 0x22, 0x33, 0xff}
+			background := []byte{0, 0, 0, 0xff}
+			foregroundOffset := (2 * 8) * 4
+			backgroundOffset := foregroundOffset + 4
+			if len(pattern) != 8*8*4 || !bytes.Equal(pattern[foregroundOffset:foregroundOffset+4], foreground) ||
+				!bytes.Equal(pattern[backgroundOffset:backgroundOffset+4], background) {
+				t.Fatalf("mono brush was not expanded using ForeColor/BackColor: %x", pattern[foregroundOffset:foregroundOffset+8])
+			}
+		})
+	}
+}
+
 func TestParseRDPOrdersUpdateRejectsMalformedCachedBrushOrders(t *testing.T) {
 	polygon := mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
 	ellipse := mcsTestEllipseCBOrder(1, 1, 5, 5, 9)
@@ -1469,10 +1510,12 @@ func TestParseRDPOrdersUpdateRejectsMalformedCachedBrushOrders(t *testing.T) {
 		index byte
 	}{
 		{name: "polygon inline brush extra", order: append(append([]byte(nil), polygon...), make([]byte, 7)...), index: 7},
+		{name: "polygon missing mono cache entry", order: append([]byte(nil), polygon...), index: 7},
 		{name: "polygon unsupported brush format", order: append([]byte(nil), polygon...), index: 7},
 		{name: "polygon invalid cache index", order: append([]byte(nil), polygon...), index: 7},
 		{name: "polygon trailing bytes", order: append(append([]byte(nil), polygon...), 0), index: 7},
 		{name: "ellipse inline brush extra", order: append(append([]byte(nil), ellipse...), make([]byte, 7)...), index: 9},
+		{name: "ellipse missing mono cache entry", order: append([]byte(nil), ellipse...), index: 9},
 		{name: "ellipse unsupported brush format", order: append([]byte(nil), ellipse...), index: 9},
 		{name: "ellipse invalid cache index", order: append([]byte(nil), ellipse...), index: 9},
 		{name: "ellipse trailing bytes", order: append(append([]byte(nil), ellipse...), 0), index: 9},
@@ -1483,14 +1526,18 @@ func TestParseRDPOrdersUpdateRejectsMalformedCachedBrushOrders(t *testing.T) {
 			switch test.name {
 			case "polygon inline brush extra":
 				order[3] |= 0x04 // BrushExtra field must remain absent for cached brushes.
-			case "polygon unsupported brush format":
+			case "polygon missing mono cache entry":
 				order[18] = 0x81
+			case "polygon unsupported brush format":
+				order[18] = 0x82
 			case "polygon invalid cache index":
 				order[19] = 64
 			case "ellipse inline brush extra":
 				order[3] |= 0x10 // BrushExtra field must remain absent for cached brushes.
-			case "ellipse unsupported brush format":
+			case "ellipse missing mono cache entry":
 				order[22] = 0x81
+			case "ellipse unsupported brush format":
+				order[22] = 0x82
 			case "ellipse invalid cache index":
 				order[23] = 64
 			}

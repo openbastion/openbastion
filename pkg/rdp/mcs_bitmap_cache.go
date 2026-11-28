@@ -281,6 +281,23 @@ func cachedRDPBrush(state *rdpPrimaryOrderState, format, index byte) (rdpCachedB
 	return brush, nil
 }
 
+// cachedRDPPrimaryBrushPattern returns an immutable canonical 8x8 RGBA tile.
+// Monochrome brushes are expanded with the order's foreground/background colors;
+// color brushes already contain their canonical RGBA pixels.
+func cachedRDPPrimaryBrushPattern(brush rdpCachedBrush, foreground, background [4]byte) ([]byte, error) {
+	switch brush.format {
+	case rdpBrushFormat24BPP:
+		if len(brush.pixels) != 8*8*4 {
+			return nil, ErrMCSConnection
+		}
+		return append([]byte(nil), brush.pixels...), nil
+	case rdpBrushFormat1BPP:
+		return expandRDPBrushPattern(brush, foreground, background, 0, 0, 8, 8, 0, 0)
+	default:
+		return nil, ErrMCSConnection
+	}
+}
+
 func parseRDPCacheBitmapRev2(data []byte, extraFlags uint16, orderType byte, sessionBPP uint16, state *rdpPrimaryOrderState) error {
 	cacheID := extraFlags & 0x0007
 	bppID := (extraFlags >> 3) & 0x000f

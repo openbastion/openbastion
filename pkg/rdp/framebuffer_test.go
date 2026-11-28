@@ -415,6 +415,50 @@ func TestRDPFramebufferAppliesCachedBrushToPolygonCBAndEllipseCB(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferAppliesCachedMonochromeBrushToPolygonCBAndEllipseCB(t *testing.T) {
+	for name, order := range map[string][]byte{
+		"polygon": mcsTestPolygonCBOrder(1, 1, 7, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}),
+		"ellipse": mcsTestEllipseCBOrder(1, 1, 5, 5, 9),
+	} {
+		t.Run(name, func(t *testing.T) {
+			index, styleOffset := byte(7), 18
+			if name == "ellipse" {
+				index, styleOffset = 9, 22
+			}
+			order = append([]byte(nil), order...)
+			order[styleOffset] = 0x80 | rdpBrushFormat1BPP
+			state := mcsTestMonoBrushState(index)
+			update, _, err := parseRDPOrdersUpdateDataAt(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, 32, state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fb, err := NewRDPFramebuffer(8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			frame, err := fb.Apply(update, time.Unix(63, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := png.Decode(bytes.NewReader(frame.PNG))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The cached mono mask has foreground bits at pattern (0, 2) and
+			// (2, 2). The order origin is (1, -1): (1,1) samples the polygon
+			// foreground and (3,1) samples the topmost ellipse foreground.
+			x := 1
+			if name == "ellipse" {
+				x = 3
+			}
+			got := color.RGBAModel.Convert(decoded.At(x, 1)).(color.RGBA)
+			if got != (color.RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xff}) {
+				t.Fatalf("%s mono foreground pixel = %#v", name, got)
+			}
+		})
+	}
+}
+
 func TestRDPFramebufferRejectsMalformedPolygonAtomically(t *testing.T) {
 	framebuffer, err := NewRDPFramebuffer(8, 8)
 	if err != nil {

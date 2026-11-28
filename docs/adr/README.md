@@ -174,6 +174,7 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | 19 | [ADR-0101](0101-le-proxy-rdp-annonce-le-pipeline-graphique-avec-des-codecs-sans-perte.md) | Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement | Accepté |
 | 20 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
 | 21 | [ADR-0146](0146-ordres-polygone-ellipse-avec-brosse-cachee-rdp.md) | PolygonCB et EllipseCB consomment une brosse couleur mise en cache, avec deux négociations indépendantes | Proposé |
+| 22 | [ADR-0147](0147-brosses-monochromes-pour-polygoncb-et-ellipsecb-rdp.md) | PolygonCB et EllipseCB développent les brosses monochromes en utilisant ForeColor et BackColor | Proposé |
 
 ### 10. Proxy base de données
 
@@ -467,3 +468,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 
 | [ADR-0145](0145-negociation-de-multiopaquerect-rdp.md) | MultiOpaqueRect est négocié indépendamment, uniquement en 32 bpp | Proposé | Proxy écran RDP et VNC |
 | [ADR-0146](0146-ordres-polygone-ellipse-avec-brosse-cachee-rdp.md) | PolygonCB et EllipseCB consomment une brosse couleur mise en cache, avec deux négociations indépendantes | Proposé | Proxy écran RDP et VNC |
+| [ADR-0147](0147-brosses-monochromes-pour-polygoncb-et-ellipsecb-rdp.md) | PolygonCB et EllipseCB développent les brosses monochromes avec ForeColor et BackColor | Proposé | Proxy écran RDP et VNC |
