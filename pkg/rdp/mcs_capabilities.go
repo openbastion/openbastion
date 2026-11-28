@@ -52,6 +52,7 @@ type RDPServerCapabilities struct {
 	DesktopWidth          uint16
 	DesktopHeight         uint16
 	PreferredBitsPerPixel uint16
+	InputFlags            uint16
 	CapabilityTypes       []uint16
 }
 
@@ -283,6 +284,7 @@ func validateRDPServerCapability(typ uint16, capability []byte, result *RDPServe
 		if len(capability) != 88 || inputFlags&0x0001 == 0 || inputFlags&^uint16(0x03fd) != 0 {
 			return ErrMCSConnection
 		}
+		result.InputFlags = inputFlags
 	}
 	return nil
 }
@@ -417,7 +419,7 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	input := make([]byte, 88)
 	binary.LittleEndian.PutUint16(input[:2], rdpCapInput)
 	binary.LittleEndian.PutUint16(input[2:4], uint16(len(input)))
-	binary.LittleEndian.PutUint16(input[4:6], 1) // INPUT_FLAG_SCANCODES is mandatory.
+	binary.LittleEndian.PutUint16(input[4:6], rdpInputFlagScancodes|rdpInputFlagUnicode|rdpInputFlagFastPathInput2)
 	binary.LittleEndian.PutUint32(input[12:16], rdpKeyboardEnhanced)
 	binary.LittleEndian.PutUint32(input[20:24], rdpKeyboardFunctionKeys)
 	caps = append(caps, input...)
